@@ -115,12 +115,19 @@ function pintarCelda(x, y) {
         drawCtx.fillStyle = 'black';
         drawCtx.fillRect(cellX * CELL_SIZE, cellY * CELL_SIZE, CELL_SIZE, CELL_SIZE);
         
-        // Pintar vecinos (trazo más grueso)
-        drawCtx.fillStyle = 'rgba(0,0,0,0.4)';
+        // Pintar vecinos inmediatos (trazo grueso)
+        drawCtx.fillStyle = 'rgba(0,0,0,0.7)';
         if (cellX > 0) drawCtx.fillRect((cellX-1) * CELL_SIZE, cellY * CELL_SIZE, CELL_SIZE, CELL_SIZE);
         if (cellX < GRID_SIZE-1) drawCtx.fillRect((cellX+1) * CELL_SIZE, cellY * CELL_SIZE, CELL_SIZE, CELL_SIZE);
         if (cellY > 0) drawCtx.fillRect(cellX * CELL_SIZE, (cellY-1) * CELL_SIZE, CELL_SIZE, CELL_SIZE);
         if (cellY < GRID_SIZE-1) drawCtx.fillRect(cellX * CELL_SIZE, (cellY+1) * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+        
+        // Pintar diagonales para trazo más suave
+        drawCtx.fillStyle = 'rgba(0,0,0,0.35)';
+        if (cellX > 0 && cellY > 0) drawCtx.fillRect((cellX-1) * CELL_SIZE, (cellY-1) * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+        if (cellX < GRID_SIZE-1 && cellY > 0) drawCtx.fillRect((cellX+1) * CELL_SIZE, (cellY-1) * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+        if (cellX > 0 && cellY < GRID_SIZE-1) drawCtx.fillRect((cellX-1) * CELL_SIZE, (cellY+1) * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+        if (cellX < GRID_SIZE-1 && cellY < GRID_SIZE-1) drawCtx.fillRect((cellX+1) * CELL_SIZE, (cellY+1) * CELL_SIZE, CELL_SIZE, CELL_SIZE);
         
         // Redibujar cuadrícula
         dibujarCuadricula();
