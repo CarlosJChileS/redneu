@@ -1,18 +1,16 @@
-// app.js - Lógica principal para reconocimiento de dígitos (sin TensorFlow)
+// app.js - Lógica principal para reconocimiento de dígitos con TensorFlow.js
 const CELL_SIZE = 14;
 const GRID_SIZE = 20;
 
 let isDrawing = false;
 let network, visualizer, drawCanvas, drawCtx, thumbnailCanvas, thumbnailCtx;
 let predictionTimeout = null;
-let isPredicting = false; // Flag para evitar múltiples predicciones simultáneas
+let isPredicting = false;
+let modelReady = false;
 
-window.onload = function() {
-    // Ocultar overlay de carga inmediatamente (ya no es necesario esperar)
+window.onload = async function() {
+    // Mostrar overlay de carga
     const loadingOverlay = document.getElementById('loadingOverlay');
-    if (loadingOverlay) {
-        loadingOverlay.classList.add('hidden');
-    }
     
     // Obtener elementos
     drawCanvas = document.getElementById('drawCanvas');
@@ -29,10 +27,26 @@ window.onload = function() {
     // Inicializar visualizador
     visualizer = new NetworkVisualizer('networkCanvas');
     
-    // Inicializar red neuronal simple (sin TensorFlow, instantáneo)
+    // Inicializar red neuronal con TensorFlow
     network = new SimpleNeuralNetwork();
     
     // Limpiar canvas inicial
+    limpiarCanvas();
+    
+    // Inicializar modelo en segundo plano
+    try {
+        await network.initialize();
+        modelReady = true;
+        console.log('Modelo TensorFlow listo');
+    } catch (error) {
+        console.error('Error inicializando modelo:', error);
+        modelReady = true; // Usar fallback
+    }
+    
+    // Ocultar overlay
+    if (loadingOverlay) {
+        loadingOverlay.classList.add('hidden');
+    }
     limpiarCanvas();
     
     // === EVENTOS DE MOUSE ===
