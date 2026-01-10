@@ -42,7 +42,7 @@ export class NeuralNetwork {
   private buildModel(): tf.Sequential {
     const m = tf.sequential()
     
-    // CNN más robusta para diferentes estilos de escritura
+    // CNN robusta para reconocimiento de dígitos
     m.add(tf.layers.conv2d({
       inputShape: [28, 28, 1],
       filters: 32,
@@ -51,7 +51,14 @@ export class NeuralNetwork {
       padding: 'same'
     }))
     m.add(tf.layers.batchNormalization())
+    m.add(tf.layers.conv2d({
+      filters: 32,
+      kernelSize: 3,
+      activation: 'relu',
+      padding: 'same'
+    }))
     m.add(tf.layers.maxPooling2d({ poolSize: 2 }))
+    m.add(tf.layers.dropout({ rate: 0.25 }))
     
     m.add(tf.layers.conv2d({
       filters: 64,
@@ -60,18 +67,18 @@ export class NeuralNetwork {
       padding: 'same'
     }))
     m.add(tf.layers.batchNormalization())
-    m.add(tf.layers.maxPooling2d({ poolSize: 2 }))
-    
     m.add(tf.layers.conv2d({
       filters: 64,
       kernelSize: 3,
       activation: 'relu',
       padding: 'same'
     }))
+    m.add(tf.layers.maxPooling2d({ poolSize: 2 }))
+    m.add(tf.layers.dropout({ rate: 0.25 }))
     
     m.add(tf.layers.flatten())
-    m.add(tf.layers.dense({ units: 128, activation: 'relu' }))
-    m.add(tf.layers.dropout({ rate: 0.4 }))
+    m.add(tf.layers.dense({ units: 256, activation: 'relu' }))
+    m.add(tf.layers.dropout({ rate: 0.5 }))
     m.add(tf.layers.dense({ units: 10, activation: 'softmax' }))
 
     m.compile({
@@ -91,13 +98,13 @@ export class NeuralNetwork {
     
     const { xs, ys } = await this.createDatasetAsync()
     
-    const totalEpochs = 18
+    const totalEpochs = 20
     
     await this.model.fit(xs, ys, {
       epochs: totalEpochs,
       batchSize: 64,
       shuffle: true,
-      validationSplit: 0.12,
+      validationSplit: 0.15,
       callbacks: {
         onEpochEnd: async (epoch, logs) => {
           const progress = 22 + ((epoch + 1) / totalEpochs) * 73
@@ -117,16 +124,13 @@ export class NeuralNetwork {
     const Y: number[][] = []
     
     const templates = this.getAllTemplates()
-    const baseSamples = 350
+    const samplesPerDigit = 450
     
     for (let d = 0; d < 10; d++) {
       const digitTemplates = templates[d]
-      // Más muestras para dígitos difíciles (8 y 9)
-      const samplesPerDigit = (d === 8 || d === 9) ? baseSamples + 150 : baseSamples
       
       for (let i = 0; i < samplesPerDigit; i++) {
         const t = digitTemplates[Math.floor(Math.random() * digitTemplates.length)]
-        // Aplicar estilo aleatorio de escritura
         const style = this.getRandomStyle()
         X.push(this.renderWithStyle(t, style))
         
@@ -149,42 +153,26 @@ export class NeuralNetwork {
     return { xs: tf.tensor4d(X), ys: tf.tensor2d(Y) }
   }
 
-  // Diferentes estilos de escritura
   private getRandomStyle(): WritingStyle {
     const styles: WritingStyle[] = [
-      // Escritura normal
       { scale: 2.8, thickness: 0.9, shearX: 0, shearY: 0, stretchX: 1, stretchY: 1, blur: 0 },
-      // Letra grande
       { scale: 2.0, thickness: 1.0, shearX: 0, shearY: 0, stretchX: 1, stretchY: 1, blur: 0 },
-      // Letra pequeña
       { scale: 3.8, thickness: 0.8, shearX: 0, shearY: 0, stretchX: 1, stretchY: 1, blur: 0 },
-      // Cursiva derecha
       { scale: 2.8, thickness: 0.85, shearX: 0.25, shearY: 0, stretchX: 0.9, stretchY: 1, blur: 0 },
-      // Cursiva izquierda
       { scale: 2.8, thickness: 0.85, shearX: -0.2, shearY: 0, stretchX: 0.9, stretchY: 1, blur: 0 },
-      // Letra ancha
       { scale: 2.5, thickness: 0.9, shearX: 0, shearY: 0, stretchX: 1.3, stretchY: 1, blur: 0 },
-      // Letra alta
       { scale: 2.5, thickness: 0.85, shearX: 0, shearY: 0, stretchX: 1, stretchY: 1.3, blur: 0 },
-      // Letra fina
       { scale: 2.8, thickness: 0.55, shearX: 0, shearY: 0, stretchX: 1, stretchY: 1, blur: 0 },
-      // Letra gruesa
       { scale: 2.8, thickness: 1.2, shearX: 0, shearY: 0, stretchX: 1, stretchY: 1, blur: 0.5 },
-      // Letra comprimida
       { scale: 3.0, thickness: 0.8, shearX: 0, shearY: 0, stretchX: 0.7, stretchY: 1, blur: 0 },
-      // Letra expandida horizontal
       { scale: 3.0, thickness: 0.85, shearX: 0, shearY: 0, stretchX: 1.4, stretchY: 0.9, blur: 0 },
-      // Estilo manuscrito rápido
       { scale: 2.6, thickness: 0.7, shearX: 0.15, shearY: 0.05, stretchX: 1.1, stretchY: 1, blur: 0.3 },
-      // Estilo bloque
       { scale: 2.5, thickness: 1.1, shearX: 0, shearY: 0, stretchX: 1, stretchY: 1, blur: 0.2 },
-      // Micro escritura
       { scale: 4.2, thickness: 0.7, shearX: 0, shearY: 0, stretchX: 1, stretchY: 1, blur: 0 },
     ]
     
     const base = styles[Math.floor(Math.random() * styles.length)]
     
-    // Añadir variación aleatoria al estilo base
     return {
       scale: base.scale + (Math.random() - 0.5) * 0.8,
       thickness: base.thickness + (Math.random() - 0.5) * 0.25,
@@ -208,7 +196,6 @@ export class NeuralNetwork {
     const cos = Math.cos(angle)
     const sin = Math.sin(angle)
 
-    // Primera pasada: renderizar
     const raw: number[][] = []
     for (let y = 0; y < 28; y++) {
       const row: number[] = []
@@ -252,24 +239,20 @@ export class NeuralNetwork {
       raw.push(row)
     }
     
-    // Segunda pasada: aplicar blur si es necesario y añadir variación
     for (let y = 0; y < 28; y++) {
       const row: number[][] = []
       for (let x = 0; x < 28; x++) {
         let val = raw[y][x]
         
-        // Blur simple (promedio con vecinos)
         if (style.blur > 0 && x > 0 && x < 27 && y > 0 && y < 27) {
           const neighbors = (raw[y-1][x] + raw[y+1][x] + raw[y][x-1] + raw[y][x+1]) / 4
           val = val * (1 - style.blur * 0.5) + neighbors * style.blur * 0.5
         }
         
-        // Variación natural del trazo
         if (val > 0.2) {
           val = val * (0.8 + Math.random() * 0.3)
         }
         
-        // Ruido mínimo de fondo
         if (val < 0.03 && Math.random() < 0.008) {
           val = Math.random() * 0.06
         }
@@ -282,983 +265,320 @@ export class NeuralNetwork {
     return out
   }
 
-  // Plantillas con múltiples estilos de escritura para cada dígito
+  // ============================================
+  // PLANTILLAS COMPLETAS PARA TODOS LOS DÍGITOS
+  // ============================================
   private getAllTemplates(): Record<number, number[][][]> {
     return {
+      // ========== CERO (0) ==========
       0: [
-        // Estilo redondo clásico
-        this.parseTemplate([
-          '..###..',
-          '.#...#.',
-          '#.....#',
-          '#.....#',
-          '#.....#',
-          '.#...#.',
-          '..###..'
-        ]),
-        // Estilo ovalado vertical
-        this.parseTemplate([
-          '..##..',
-          '.#..#.',
-          '#....#',
-          '#....#',
-          '#....#',
-          '#....#',
-          '.#..#.',
-          '..##..'
-        ]),
-        // Estilo ovalado horizontal
-        this.parseTemplate([
-          '.####.',
-          '#....#',
-          '#....#',
-          '#....#',
-          '.####.'
-        ]),
-        // Estilo cuadrado
-        this.parseTemplate([
-          '.####.',
-          '#....#',
-          '#....#',
-          '#....#',
-          '#....#',
-          '#....#',
-          '.####.'
-        ]),
-        // Estilo pequeño
-        this.parseTemplate([
-          '.##.',
-          '#..#',
-          '#..#',
-          '#..#',
-          '.##.'
-        ]),
-        // Con línea diagonal (cero europeo)
-        this.parseTemplate([
-          '..###..',
-          '.#...#.',
-          '#....##',
-          '#...#.#',
-          '#..#..#',
-          '.#...#.',
-          '..###..'
-        ]),
+        // Círculo redondo clásico
+        this.p(['..###..', '.#...#.', '#.....#', '#.....#', '#.....#', '.#...#.', '..###..']),
+        // Óvalo vertical alto
+        this.p(['..##..', '.#..#.', '#....#', '#....#', '#....#', '#....#', '.#..#.', '..##..']),
+        // Óvalo horizontal ancho
+        this.p(['.#####.', '#.....#', '#.....#', '#.....#', '.#####.']),
+        // Cuadrado redondeado
+        this.p(['.####.', '#....#', '#....#', '#....#', '#....#', '#....#', '.####.']),
+        // Pequeño compacto
+        this.p(['.##.', '#..#', '#..#', '#..#', '.##.']),
         // Muy redondo
-        this.parseTemplate([
-          '..##..',
-          '.#..#.',
-          '.#..#.',
-          '.#..#.',
-          '.#..#.',
-          '..##..'
-        ]),
-        // Angular
-        this.parseTemplate([
-          '.###.',
-          '#...#',
-          '#...#',
-          '#...#',
-          '#...#',
-          '.###.'
-        ])
+        this.p(['..##..', '.#..#.', '.#..#.', '.#..#.', '.#..#.', '..##..']),
+        // Con barra diagonal (cero europeo)
+        this.p(['..###..', '.#...#.', '#....##', '#...#.#', '#..#..#', '.#...#.', '..###..']),
+        // Ovalado estrecho
+        this.p(['.##.', '#..#', '#..#', '#..#', '#..#', '#..#', '.##.']),
+        // Grande y redondo
+        this.p(['.####.', '#....#', '#....#', '#....#', '#....#', '.####.']),
+        // Estilo manuscrito
+        this.p(['..##.', '.#..#', '#...#', '#...#', '#...#', '.#..#', '..##.']),
+        // Muy pequeño
+        this.p(['##', '##']),
+        // Circular perfecto
+        this.p(['.###.', '#...#', '#...#', '#...#', '.###.']),
+        // Ovalado inclinado
+        this.p(['...##.', '..#..#', '.#...#', '#....#', '#...#.', '#..#..', '.##...']),
+        // Rectangular
+        this.p(['####', '#..#', '#..#', '#..#', '#..#', '####']),
+        // Con abertura arriba
+        this.p(['.#.#.', '#...#', '#...#', '#...#', '#...#', '.###.']),
       ],
+
+      // ========== UNO (1) ==========
       1: [
-        // Con base y serif
-        this.parseTemplate([
-          '...#...',
-          '..##...',
-          '.#.#...',
-          '...#...',
-          '...#...',
-          '...#...',
-          '.#####.'
-        ]),
+        // Con serif y base
+        this.p(['...#...', '..##...', '.#.#...', '...#...', '...#...', '...#...', '.#####.']),
         // Simple con base
-        this.parseTemplate([
-          '..#.',
-          '.##.',
-          '..#.',
-          '..#.',
-          '..#.',
-          '..#.',
-          '.###'
-        ]),
+        this.p(['..#.', '.##.', '..#.', '..#.', '..#.', '..#.', '.###']),
         // Solo línea vertical
-        this.parseTemplate([
-          '.#.',
-          '.#.',
-          '.#.',
-          '.#.',
-          '.#.',
-          '.#.',
-          '.#.'
-        ]),
-        // Con serif arriba
-        this.parseTemplate([
-          '..#..',
-          '.##..',
-          '..#..',
-          '..#..',
-          '..#..',
-          '..#..',
-          '..#..'
-        ]),
-        // Estilo manuscrito inclinado
-        this.parseTemplate([
-          '...#',
-          '..##',
-          '...#',
-          '...#',
-          '...#',
-          '...#',
-          '...#'
-        ]),
+        this.p(['#', '#', '#', '#', '#', '#', '#']),
+        // Con gancho arriba
+        this.p(['..#..', '.##..', '..#..', '..#..', '..#..', '..#..', '..#..']),
+        // Inclinado
+        this.p(['...#', '..##', '...#', '...#', '...#', '...#', '...#']),
         // Con gancho grande
-        this.parseTemplate([
-          '....#.',
-          '...##.',
-          '..#.#.',
-          '.#..#.',
-          '....#.',
-          '....#.',
-          '.#####'
-        ]),
+        this.p(['....#.', '...##.', '..#.#.', '.#..#.', '....#.', '....#.', '.#####']),
         // Muy simple
-        this.parseTemplate([
-          '#',
-          '#',
-          '#',
-          '#',
-          '#',
-          '#',
-          '#'
-        ]),
+        this.p(['.#.', '.#.', '.#.', '.#.', '.#.', '.#.', '.#.']),
         // Con serif completo
-        this.parseTemplate([
-          '..##.',
-          '.#.#.',
-          '...#.',
-          '...#.',
-          '...#.',
-          '...#.',
-          '.####'
-        ])
+        this.p(['..##.', '.#.#.', '...#.', '...#.', '...#.', '...#.', '.####']),
+        // Grueso
+        this.p(['..##', '.###', '..##', '..##', '..##', '..##', '.####']),
+        // Manuscrito rápido
+        this.p(['.#', '##', '.#', '.#', '.#', '.#', '.#']),
+        // Con base ancha
+        this.p(['..#..', '.##..', '..#..', '..#..', '..#..', '..#..', '#####']),
+        // Estilo romano
+        this.p(['..#..', '.###.', '..#..', '..#..', '..#..', '..#..', '.###.']),
+        // Delgado
+        this.p(['#', '#', '#', '#', '#', '#', '#', '#']),
+        // Con serif izquierdo
+        this.p(['##.', '.#.', '.#.', '.#.', '.#.', '.#.', '###']),
       ],
+
+      // ========== DOS (2) ==========
       2: [
         // Clásico con curva
-        this.parseTemplate([
-          '.####.',
-          '#....#',
-          '.....#',
-          '....#.',
-          '..##..',
-          '.#....',
-          '######'
-        ]),
-        // Más angular
-        this.parseTemplate([
-          '.###.',
-          '#...#',
-          '....#',
-          '...#.',
-          '..#..',
-          '.#...',
-          '#####'
-        ]),
+        this.p(['.####.', '#....#', '.....#', '....#.', '..##..', '.#....', '######']),
+        // Angular
+        this.p(['.###.', '#...#', '....#', '...#.', '..#..', '.#...', '#####']),
         // Muy curvo
-        this.parseTemplate([
-          '####.',
-          '....#',
-          '...#.',
-          '..#..',
-          '.#...',
-          '#....',
-          '#####'
-        ]),
+        this.p(['####.', '....#', '...#.', '..#..', '.#...', '#....', '#####']),
         // Pequeño
-        this.parseTemplate([
-          '.##.',
-          '#..#',
-          '...#',
-          '..#.',
-          '.#..',
-          '#...',
-          '####'
-        ]),
-        // Con curva pronunciada arriba
-        this.parseTemplate([
-          '..##..',
-          '.#..#.',
-          '.....#',
-          '....#.',
-          '...#..',
-          '..#...',
-          '.#####'
-        ]),
+        this.p(['.##.', '#..#', '...#', '..#.', '.#..', '#...', '####']),
+        // Con curva pronunciada
+        this.p(['..##..', '.#..#.', '.....#', '....#.', '...#..', '..#...', '.#####']),
         // Estilo Z
-        this.parseTemplate([
-          '#####',
-          '....#',
-          '...#.',
-          '..#..',
-          '.#...',
-          '#....',
-          '#####'
-        ]),
-        // Redondeado
-        this.parseTemplate([
-          '.###.',
-          '#...#',
-          '....#',
-          '..##.',
-          '.#...',
-          '#....',
-          '#####'
-        ]),
+        this.p(['#####', '....#', '...#.', '..#..', '.#...', '#....', '#####']),
+        // Redondeado arriba
+        this.p(['.###.', '#...#', '....#', '..##.', '.#...', '#....', '#####']),
         // Manuscrito rápido
-        this.parseTemplate([
-          '.##.',
-          '...#',
-          '..#.',
-          '.#..',
-          '#...',
-          '#...',
-          '###.'
-        ])
+        this.p(['.##.', '...#', '..#.', '.#..', '#...', '#...', '###.']),
+        // Con base extendida
+        this.p(['.###.', '#...#', '....#', '...#.', '..#..', '.#...', '######']),
+        // Curva suave
+        this.p(['..##.', '.#..#', '....#', '...#.', '..#..', '.#...', '####.']),
+        // Muy angular
+        this.p(['###', '..#', '.#.', '#..', '#..', '###']),
+        // Con loop
+        this.p(['.##.', '#..#', '...#', '..#.', '.#..', '#...', '####']),
+        // Estilo digital
+        this.p(['###.', '...#', '###.', '#...', '#...', '###.']),
       ],
+
+      // ========== TRES (3) ==========
       3: [
         // Clásico con dos curvas
-        this.parseTemplate([
-          '.####.',
-          '#....#',
-          '.....#',
-          '..###.',
-          '.....#',
-          '#....#',
-          '.####.'
-        ]),
+        this.p(['.####.', '#....#', '.....#', '..###.', '.....#', '#....#', '.####.']),
         // Angular
-        this.parseTemplate([
-          '####.',
-          '....#',
-          '....#',
-          '.###.',
-          '....#',
-          '....#',
-          '####.'
-        ]),
+        this.p(['####.', '....#', '....#', '.###.', '....#', '....#', '####.']),
         // Redondeado
-        this.parseTemplate([
-          '.###.',
-          '#...#',
-          '....#',
-          '..##.',
-          '....#',
-          '#...#',
-          '.###.'
-        ]),
+        this.p(['.###.', '#...#', '....#', '..##.', '....#', '#...#', '.###.']),
         // Pequeño
-        this.parseTemplate([
-          '###.',
-          '...#',
-          '...#',
-          '.##.',
-          '...#',
-          '...#',
-          '###.'
-        ]),
+        this.p(['###.', '...#', '...#', '.##.', '...#', '...#', '###.']),
         // Manuscrito
-        this.parseTemplate([
-          '.###',
-          '...#',
-          '..#.',
-          '...#',
-          '...#',
-          '...#',
-          '.###'
-        ]),
+        this.p(['.###', '...#', '..#.', '...#', '...#', '...#', '.###']),
         // Con curvas suaves
-        this.parseTemplate([
-          '..##.',
-          '.#..#',
-          '....#',
-          '..##.',
-          '....#',
-          '.#..#',
-          '..##.'
-        ]),
+        this.p(['..##.', '.#..#', '....#', '..##.', '....#', '.#..#', '..##.']),
         // Estilo bloque
-        this.parseTemplate([
-          '#####',
-          '....#',
-          '..###',
-          '....#',
-          '....#',
-          '....#',
-          '#####'
-        ]),
-        // Abierto arriba
-        this.parseTemplate([
-          '###.',
-          '...#',
-          '.##.',
-          '...#',
-          '...#',
-          '...#',
-          '###.'
-        ])
+        this.p(['#####', '....#', '..###', '....#', '....#', '....#', '#####']),
+        // Abierto
+        this.p(['###.', '...#', '.##.', '...#', '...#', '...#', '###.']),
+        // Con cintura estrecha
+        this.p(['.###.', '#...#', '....#', '...#.', '....#', '#...#', '.###.']),
+        // Muy redondeado
+        this.p(['..##..', '.#..#.', '....#.', '..##..', '....#.', '.#..#.', '..##..']),
+        // Digital
+        this.p(['###.', '...#', '###.', '...#', '...#', '###.']),
+        // Cursivo
+        this.p(['.##.', '...#', '..#.', '...#', '...#', '.##.']),
       ],
+
+      // ========== CUATRO (4) ==========
       4: [
         // Clásico cerrado
-        this.parseTemplate([
-          '....#.',
-          '...##.',
-          '..#.#.',
-          '.#..#.',
-          '######',
-          '....#.',
-          '....#.'
-        ]),
+        this.p(['....#.', '...##.', '..#.#.', '.#..#.', '######', '....#.', '....#.']),
         // Abierto arriba
-        this.parseTemplate([
-          '#...#',
-          '#...#',
-          '#...#',
-          '#####',
-          '....#',
-          '....#',
-          '....#'
-        ]),
+        this.p(['#...#', '#...#', '#...#', '#####', '....#', '....#', '....#']),
         // Con diagonal
-        this.parseTemplate([
-          '..#.#',
-          '.#..#',
-          '#...#',
-          '#####',
-          '....#',
-          '....#',
-          '....#'
-        ]),
+        this.p(['..#.#', '.#..#', '#...#', '#####', '....#', '....#', '....#']),
         // Pequeño
-        this.parseTemplate([
-          '#..#',
-          '#..#',
-          '#..#',
-          '####',
-          '...#',
-          '...#',
-          '...#'
-        ]),
+        this.p(['#..#', '#..#', '#..#', '####', '...#', '...#', '...#']),
         // Estilo europeo
-        this.parseTemplate([
-          '...#.',
-          '..##.',
-          '.#.#.',
-          '#..#.',
-          '#####',
-          '...#.',
-          '...#.'
-        ]),
-        // Muy angular
-        this.parseTemplate([
-          '#..#',
-          '#..#',
-          '####',
-          '...#',
-          '...#',
-          '...#',
-          '...#'
-        ]),
+        this.p(['...#.', '..##.', '.#.#.', '#..#.', '#####', '...#.', '...#.']),
+        // Angular
+        this.p(['#..#', '#..#', '####', '...#', '...#', '...#', '...#']),
         // Con serif
-        this.parseTemplate([
-          '....##',
-          '...#.#',
-          '..#..#',
-          '.#...#',
-          '######',
-          '.....#',
-          '.....#'
-        ]),
+        this.p(['....##', '...#.#', '..#..#', '.#...#', '######', '.....#', '.....#']),
         // Manuscrito
-        this.parseTemplate([
-          '.#.#',
-          '#..#',
-          '#..#',
-          '####',
-          '...#',
-          '...#',
-          '..#.'
-        ])
+        this.p(['.#.#', '#..#', '#..#', '####', '...#', '...#', '..#.']),
+        // Muy abierto
+        this.p(['#...#', '#...#', '#####', '....#', '....#', '....#']),
+        // Con base
+        this.p(['....#.', '...##.', '..#.#.', '.#..#.', '######', '....#.', '...###']),
+        // Compacto
+        this.p(['#.#', '#.#', '###', '..#', '..#']),
+        // Digital
+        this.p(['#..#', '#..#', '####', '...#', '...#']),
       ],
+
+      // ========== CINCO (5) ==========
       5: [
         // Clásico
-        this.parseTemplate([
-          '######',
-          '#.....',
-          '#.....',
-          '.####.',
-          '.....#',
-          '#....#',
-          '.####.'
-        ]),
+        this.p(['######', '#.....', '#.....', '.####.', '.....#', '#....#', '.####.']),
         // Con curva suave
-        this.parseTemplate([
-          '#####',
-          '#....',
-          '####.',
-          '....#',
-          '....#',
-          '#...#',
-          '.###.'
-        ]),
+        this.p(['#####', '#....', '####.', '....#', '....#', '#...#', '.###.']),
         // Angular
-        this.parseTemplate([
-          '#####',
-          '#....',
-          '#....',
-          '####.',
-          '....#',
-          '....#',
-          '####.'
-        ]),
+        this.p(['#####', '#....', '#....', '####.', '....#', '....#', '####.']),
         // Pequeño
-        this.parseTemplate([
-          '####',
-          '#...',
-          '###.',
-          '...#',
-          '...#',
-          '...#',
-          '###.'
-        ]),
+        this.p(['####', '#...', '###.', '...#', '...#', '...#', '###.']),
         // Redondeado
-        this.parseTemplate([
-          '#####',
-          '#....',
-          '#....',
-          '.###.',
-          '....#',
-          '....#',
-          '####.'
-        ]),
+        this.p(['#####', '#....', '#....', '.###.', '....#', '....#', '####.']),
         // Manuscrito
-        this.parseTemplate([
-          '####.',
-          '#....',
-          '###..',
-          '...#.',
-          '...#.',
-          '#..#.',
-          '.##..'
-        ]),
+        this.p(['####.', '#....', '###..', '...#.', '...#.', '#..#.', '.##..']),
         // Estilo S invertida
-        this.parseTemplate([
-          '.####',
-          '.#...',
-          '.###.',
-          '....#',
-          '....#',
-          '.#..#',
-          '..##.'
-        ]),
+        this.p(['.####', '.#...', '.###.', '....#', '....#', '.#..#', '..##.']),
         // Con base curva
-        this.parseTemplate([
-          '#####',
-          '#....',
-          '####.',
-          '....#',
-          '....#',
-          '...#.',
-          '###..'
-        ])
+        this.p(['#####', '#....', '####.', '....#', '....#', '...#.', '###..']),
+        // Digital
+        this.p(['####', '#...', '###.', '...#', '...#', '###.']),
+        // Muy angular
+        this.p(['#####', '#....', '####.', '....#', '#...#', '.###.']),
+        // Con gancho
+        this.p(['#####.', '#.....', '#####.', '.....#', '.....#', '#....#', '.####.']),
+        // Cursivo
+        this.p(['####', '#...', '##..', '..#.', '..#.', '##..']),
       ],
+
+      // ========== SEIS (6) ==========
       6: [
         // Clásico
-        this.parseTemplate([
-          '..###.',
-          '.#....',
-          '#.....',
-          '#####.',
-          '#....#',
-          '#....#',
-          '.####.'
-        ]),
+        this.p(['..###.', '.#....', '#.....', '#####.', '#....#', '#....#', '.####.']),
         // Redondeado
-        this.parseTemplate([
-          '.###.',
-          '#....',
-          '#....',
-          '####.',
-          '#...#',
-          '#...#',
-          '.###.'
-        ]),
+        this.p(['.###.', '#....', '#....', '####.', '#...#', '#...#', '.###.']),
         // Con curva arriba
-        this.parseTemplate([
-          '..##.',
-          '.#...',
-          '#....',
-          '####.',
-          '#...#',
-          '#...#',
-          '.###.'
-        ]),
+        this.p(['..##.', '.#...', '#....', '####.', '#...#', '#...#', '.###.']),
         // Pequeño
-        this.parseTemplate([
-          '.##.',
-          '#...',
-          '#...',
-          '###.',
-          '#..#',
-          '#..#',
-          '.##.'
-        ]),
+        this.p(['.##.', '#...', '#...', '###.', '#..#', '#..#', '.##.']),
         // Muy curvo arriba
-        this.parseTemplate([
-          '..#.',
-          '.#..',
-          '#...',
-          '###.',
-          '#..#',
-          '#..#',
-          '.##.'
-        ]),
+        this.p(['..#.', '.#..', '#...', '###.', '#..#', '#..#', '.##.']),
         // Estilo bloque
-        this.parseTemplate([
-          '.####',
-          '#....',
-          '#....',
-          '#####',
-          '#...#',
-          '#...#',
-          '.###.'
-        ]),
+        this.p(['.####', '#....', '#....', '#####', '#...#', '#...#', '.###.']),
         // Con loop completo
-        this.parseTemplate([
-          '..##..',
-          '.#..#.',
-          '#.....',
-          '#.##..',
-          '#...#.',
-          '.#..#.',
-          '..##..'
-        ]),
+        this.p(['..##..', '.#..#.', '#.....', '#.##..', '#...#.', '.#..#.', '..##..']),
         // Manuscrito
-        this.parseTemplate([
-          '..#.',
-          '.#..',
-          '#...',
-          '##..',
-          '#.#.',
-          '#.#.',
-          '.#..'
-        ])
+        this.p(['..#.', '.#..', '#...', '##..', '#.#.', '#.#.', '.#..']),
+        // Grande
+        this.p(['.###.', '#....', '#....', '#....', '####.', '#...#', '.###.']),
+        // Angular
+        this.p(['.###', '#...', '#...', '####', '#..#', '#..#', '.##.']),
+        // Digital
+        this.p(['###.', '#...', '###.', '#..#', '#..#', '###.']),
+        // Con espiral
+        this.p(['..##.', '.#...', '#....', '#.##.', '#...#', '.###.']),
       ],
+
+      // ========== SIETE (7) ==========
       7: [
         // Clásico
-        this.parseTemplate([
-          '######',
-          '.....#',
-          '....#.',
-          '...#..',
-          '..#...',
-          '..#...',
-          '..#...'
-        ]),
+        this.p(['######', '.....#', '....#.', '...#..', '..#...', '..#...', '..#...']),
         // Con base
-        this.parseTemplate([
-          '#####',
-          '....#',
-          '...#.',
-          '..#..',
-          '.#...',
-          '.#...',
-          '.#...'
-        ]),
+        this.p(['#####', '....#', '...#.', '..#..', '.#...', '.#...', '.#...']),
         // Con serif arriba
-        this.parseTemplate([
-          '######',
-          '#....#',
-          '....#.',
-          '...#..',
-          '..#...',
-          '..#...',
-          '..#...'
-        ]),
+        this.p(['######', '#....#', '....#.', '...#..', '..#...', '..#...', '..#...']),
         // Recto
-        this.parseTemplate([
-          '####',
-          '...#',
-          '...#',
-          '..#.',
-          '..#.',
-          '.#..',
-          '.#..'
-        ]),
-        // Con barra
-        this.parseTemplate([
-          '#####',
-          '....#',
-          '....#',
-          '...#.',
-          '..#..',
-          '..#..',
-          '.#...'
-        ]),
+        this.p(['####', '...#', '...#', '..#.', '..#.', '.#..', '.#..']),
+        // Con barra horizontal
+        this.p(['#####', '....#', '....#', '...#.', '..#..', '..#..', '.#...']),
         // Europeo con barra
-        this.parseTemplate([
-          '######',
-          '.....#',
-          '....#.',
-          '.####.',
-          '..#...',
-          '..#...',
-          '..#...'
-        ]),
+        this.p(['######', '.....#', '....#.', '.####.', '..#...', '..#...', '..#...']),
         // Manuscrito curvo
-        this.parseTemplate([
-          '#####',
-          '....#',
-          '...#.',
-          '...#.',
-          '..#..',
-          '..#..',
-          '.#...'
-        ]),
+        this.p(['#####', '....#', '...#.', '...#.', '..#..', '..#..', '.#...']),
         // Muy inclinado
-        this.parseTemplate([
-          '####',
-          '...#',
-          '..#.',
-          '..#.',
-          '.#..',
-          '.#..',
-          '#...'
-        ])
+        this.p(['####', '...#', '..#.', '..#.', '.#..', '.#..', '#...']),
+        // Digital
+        this.p(['###', '..#', '..#', '.#.', '.#.', '#..']),
+        // Con gancho arriba
+        this.p(['.#####', '....#.', '...#..', '...#..', '..#...', '..#...', '.#....']),
+        // Muy recto
+        this.p(['####', '...#', '...#', '...#', '..#.', '..#.', '.#..']),
+        // Cursivo
+        this.p(['####', '...#', '..#.', '.#..', '.#..', '#...']),
       ],
+
+      // ========== OCHO (8) ==========
       8: [
         // Clásico simétrico
-        this.parseTemplate([
-          '.####.',
-          '#....#',
-          '#....#',
-          '.####.',
-          '#....#',
-          '#....#',
-          '.####.'
-        ]),
+        this.p(['.####.', '#....#', '#....#', '.####.', '#....#', '#....#', '.####.']),
         // Redondeado compacto
-        this.parseTemplate([
-          '.###.',
-          '#...#',
-          '#...#',
-          '.###.',
-          '#...#',
-          '#...#',
-          '.###.'
-        ]),
+        this.p(['.###.', '#...#', '#...#', '.###.', '#...#', '#...#', '.###.']),
         // Pequeño cuadrado
-        this.parseTemplate([
-          '.##.',
-          '#..#',
-          '#..#',
-          '.##.',
-          '#..#',
-          '#..#',
-          '.##.'
-        ]),
-        // Dos círculos separados (muñeco de nieve)
-        this.parseTemplate([
-          '..##..',
-          '.#..#.',
-          '.#..#.',
-          '..##..',
-          '.#..#.',
-          '.#..#.',
-          '..##..'
-        ]),
+        this.p(['.##.', '#..#', '#..#', '.##.', '#..#', '#..#', '.##.']),
+        // Dos círculos (muñeco de nieve)
+        this.p(['..##..', '.#..#.', '.#..#.', '..##..', '.#..#.', '.#..#.', '..##..']),
         // Estilo infinito/lazo
-        this.parseTemplate([
-          '.###.',
-          '#...#',
-          '.#.#.',
-          '..#..',
-          '.#.#.',
-          '#...#',
-          '.###.'
-        ]),
+        this.p(['.###.', '#...#', '.#.#.', '..#..', '.#.#.', '#...#', '.###.']),
         // Círculo arriba más pequeño
-        this.parseTemplate([
-          '..##..',
-          '.#..#.',
-          '..##..',
-          '.#..#.',
-          '#....#',
-          '#....#',
-          '.####.'
-        ]),
+        this.p(['..##..', '.#..#.', '..##..', '.#..#.', '#....#', '#....#', '.####.']),
         // Círculo abajo más pequeño
-        this.parseTemplate([
-          '.####.',
-          '#....#',
-          '#....#',
-          '.####.',
-          '.#..#.',
-          '.#..#.',
-          '..##..'
-        ]),
+        this.p(['.####.', '#....#', '#....#', '.####.', '.#..#.', '.#..#.', '..##..']),
         // Muy redondeado continuo
-        this.parseTemplate([
-          '..##..',
-          '.#..#.',
-          '#....#',
-          '.#..#.',
-          '#....#',
-          '.#..#.',
-          '..##..'
-        ]),
-        // Estilo cursivo
-        this.parseTemplate([
-          '.##.',
-          '#..#',
-          '#..#',
-          '.##.',
-          '#..#',
-          '#..#',
-          '.##.'
-        ]),
+        this.p(['..##..', '.#..#.', '#....#', '.#..#.', '#....#', '.#..#.', '..##..']),
         // Angular
-        this.parseTemplate([
-          '####.',
-          '#...#',
-          '#...#',
-          '.###.',
-          '#...#',
-          '#...#',
-          '####.'
-        ]),
+        this.p(['####.', '#...#', '#...#', '.###.', '#...#', '#...#', '####.']),
         // Cintura muy estrecha
-        this.parseTemplate([
-          '.###.',
-          '#...#',
-          '#...#',
-          '..#..',
-          '#...#',
-          '#...#',
-          '.###.'
-        ]),
-        // Dos óvalos verticales
-        this.parseTemplate([
-          '.##.',
-          '#..#',
-          '#..#',
-          '#..#',
-          '#..#',
-          '#..#',
-          '.##.'
-        ]),
-        // Estilo manuscrito rápido
-        this.parseTemplate([
-          '.##.',
-          '#..#',
-          '.#..',
-          '..#.',
-          '.#..',
-          '#..#',
-          '.##.'
-        ]),
-        // Con centro marcado
-        this.parseTemplate([
-          '.###.',
-          '#...#',
-          '#.#.#',
-          '.###.',
-          '#.#.#',
-          '#...#',
-          '.###.'
-        ]),
+        this.p(['.###.', '#...#', '#...#', '..#..', '#...#', '#...#', '.###.']),
+        // Digital
+        this.p(['###.', '#..#', '###.', '#..#', '#..#', '###.']),
+        // Manuscrito
+        this.p(['.##.', '#..#', '.#..', '..#.', '.#..', '#..#', '.##.']),
         // Muy pequeño
-        this.parseTemplate([
-          '.#.',
-          '#.#',
-          '.#.',
-          '#.#',
-          '.#.'
-        ]),
-        // Ovalado horizontal
-        this.parseTemplate([
-          '.####.',
-          '#....#',
-          '.####.',
-          '#....#',
-          '.####.'
-        ])
+        this.p(['.#.', '#.#', '.#.', '#.#', '.#.']),
+        // Con centro marcado
+        this.p(['.###.', '#...#', '#.#.#', '.###.', '#.#.#', '#...#', '.###.']),
+        // Asimétrico
+        this.p(['.##.', '#..#', '#..#', '.###', '#..#', '#..#', '.##.']),
       ],
+
+      // ========== NUEVE (9) ==========
       9: [
         // Clásico con cola curva
-        this.parseTemplate([
-          '.####.',
-          '#....#',
-          '#....#',
-          '.#####',
-          '.....#',
-          '....#.',
-          '.###..'
-        ]),
+        this.p(['.####.', '#....#', '#....#', '.#####', '.....#', '....#.', '.###..']),
         // Redondeado con cola corta
-        this.parseTemplate([
-          '.###.',
-          '#...#',
-          '#...#',
-          '.####',
-          '....#',
-          '...#.',
-          '.##..'
-        ]),
+        this.p(['.###.', '#...#', '#...#', '.####', '....#', '...#.', '.##..']),
         // Con cola recta vertical
-        this.parseTemplate([
-          '.###.',
-          '#...#',
-          '#...#',
-          '.####',
-          '....#',
-          '....#',
-          '....#'
-        ]),
+        this.p(['.###.', '#...#', '#...#', '.####', '....#', '....#', '....#']),
         // Pequeño compacto
-        this.parseTemplate([
-          '.##.',
-          '#..#',
-          '#..#',
-          '.###',
-          '...#',
-          '...#',
-          '..#.'
-        ]),
+        this.p(['.##.', '#..#', '#..#', '.###', '...#', '...#', '..#.']),
         // Cola muy larga
-        this.parseTemplate([
-          '.###.',
-          '#...#',
-          '#...#',
-          '.####',
-          '....#',
-          '....#',
-          '....#',
-          '....#'
-        ]),
+        this.p(['.###.', '#...#', '#...#', '.####', '....#', '....#', '....#', '....#']),
         // Estilo q cursivo
-        this.parseTemplate([
-          '.##.',
-          '#..#',
-          '#..#',
-          '.###',
-          '...#',
-          '..#.',
-          '.#..'
-        ]),
+        this.p(['.##.', '#..#', '#..#', '.###', '...#', '..#.', '.#..']),
         // Círculo arriba con línea
-        this.parseTemplate([
-          '.##.',
-          '#..#',
-          '#..#',
-          '.##.',
-          '..#.',
-          '..#.',
-          '..#.'
-        ]),
+        this.p(['.##.', '#..#', '#..#', '.##.', '..#.', '..#.', '..#.']),
         // Angular cerrado
-        this.parseTemplate([
-          '####.',
-          '#...#',
-          '#...#',
-          '.####',
-          '....#',
-          '....#',
-          '###..'
-        ]),
+        this.p(['####.', '#...#', '#...#', '.####', '....#', '....#', '###..']),
         // Muy redondeado
-        this.parseTemplate([
-          '..##..',
-          '.#..#.',
-          '#....#',
-          '.#..##',
-          '.....#',
-          '....#.',
-          '..##..'
-        ]),
+        this.p(['..##..', '.#..#.', '#....#', '.#..##', '.....#', '....#.', '..##..']),
         // Con gancho abajo
-        this.parseTemplate([
-          '.###.',
-          '#...#',
-          '#...#',
-          '.####',
-          '....#',
-          '...#.',
-          '..#..',
-          '.#...'
-        ]),
-        // Estilo reloj (como un 9 en reloj digital simplificado)
-        this.parseTemplate([
-          '####',
-          '#..#',
-          '####',
-          '...#',
-          '...#',
-          '...#'
-        ]),
+        this.p(['.###.', '#...#', '#...#', '.####', '....#', '...#.', '..#..', '.#...']),
+        // Digital
+        this.p(['####', '#..#', '####', '...#', '...#', '...#']),
         // Círculo pequeño arriba
-        this.parseTemplate([
-          '..#..',
-          '.#.#.',
-          '.#.#.',
-          '..##.',
-          '...#.',
-          '...#.',
-          '...#.'
-        ]),
+        this.p(['..#..', '.#.#.', '.#.#.', '..##.', '...#.', '...#.', '...#.']),
         // Ovalado con cola
-        this.parseTemplate([
-          '.##.',
-          '#..#',
-          '#..#',
-          '#..#',
-          '.###',
-          '...#',
-          '...#'
-        ]),
+        this.p(['.##.', '#..#', '#..#', '#..#', '.###', '...#', '...#']),
         // Muy cursivo
-        this.parseTemplate([
-          '.##.',
-          '#..#',
-          '#.#.',
-          '.#.#',
-          '...#',
-          '..#.',
-          '.#..'
-        ]),
+        this.p(['.##.', '#..#', '#.#.', '.#.#', '...#', '..#.', '.#..']),
         // Con círculo grande
-        this.parseTemplate([
-          '.####.',
-          '#....#',
-          '#....#',
-          '#....#',
-          '.#####',
-          '.....#',
-          '.....#'
-        ]),
-        // Cola recta larga
-        this.parseTemplate([
-          '.###.',
-          '#...#',
-          '#...#',
-          '.####',
-          '....#',
-          '....#',
-          '....#',
-          '...#.'
-        ])
+        this.p(['.####.', '#....#', '#....#', '#....#', '.#####', '.....#', '.....#']),
       ]
     }
+  }
+
+  // Alias corto para parseTemplate
+  private p(lines: string[]): number[][] {
+    return this.parseTemplate(lines)
   }
 
   private parseTemplate(lines: string[]): number[][] {
