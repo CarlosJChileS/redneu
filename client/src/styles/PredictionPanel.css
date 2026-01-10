@@ -1,0 +1,143 @@
+.prediction-panel {
+  background: linear-gradient(145deg, #1a1a2e 0%, #0f0f1a 100%);
+  border-radius: 12px;
+  padding: 12px;
+  border: 1px solid rgba(102, 126, 234, 0.2);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.prediction-panel .panel-label {
+  color: #667eea;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.prediction-display {
+  text-align: center;
+  padding: 10px 0;
+}
+
+.predicted-digit {
+  font-size: 64px;
+  font-weight: 800;
+  line-height: 1;
+  text-shadow: 0 0 30px currentColor;
+}
+
+.confidence-section {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.confidence-badge {
+  padding: 4px 10px;
+  border-radius: 15px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: white;
+}
+
+.confidence-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.waiting {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  color: rgba(255, 255, 255, 0.4);
+  padding: 20px 0;
+}
+
+.waiting-icon {
+  font-size: 32px;
+}
+
+.probabilities {
+  flex: 1;
+  overflow: hidden;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.probs-label {
+  display: block;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+}
+
+.prob-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.prob-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.prob-item.winner {
+  transform: scale(1.02);
+}
+
+.prob-digit {
+  width: 16px;
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+  text-align: center;
+}
+
+.prob-item.winner .prob-digit {
+  color: #28a745;
+  font-weight: 800;
+}
+
+.prob-bar-container {
+  flex: 1;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.prob-bar {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.2s;
+  min-width: 2px;
+}
+
+.prob-value {
+  width: 32px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.5);
+  text-align: right;
+  font-family: monospace;
+}
+
+.prob-item.winner .prob-value {
+  color: #28a745;
+  font-weight: 600;
+}
+
+.thumbnail-section {
+  display: none;
+}

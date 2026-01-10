@@ -1,0 +1,142 @@
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(135deg, #0a0a15 0%, #141428 50%, #0a0a15 100%);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9999;
+}
+
+.loading-content {
+  text-align: center;
+}
+
+.neural-animation {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 30px;
+}
+
+.neuron-col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.neuron {
+  width: 14px;
+  height: 14px;
+  background: radial-gradient(circle, #667eea 0%, #764ba2 100%);
+  border-radius: 50%;
+  box-shadow: 0 0 15px rgba(102, 126, 234, 0.6);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.neuron.big {
+  width: 18px;
+  height: 18px;
+}
+
+.neuron-col:nth-child(1) .neuron:nth-child(1) { animation-delay: 0s; }
+.neuron-col:nth-child(1) .neuron:nth-child(2) { animation-delay: 0.1s; }
+.neuron-col:nth-child(1) .neuron:nth-child(3) { animation-delay: 0.2s; }
+
+.neuron-col:nth-child(3) .neuron:nth-child(1) { animation-delay: 0.2s; }
+.neuron-col:nth-child(3) .neuron:nth-child(2) { animation-delay: 0.3s; }
+.neuron-col:nth-child(3) .neuron:nth-child(3) { animation-delay: 0.4s; }
+.neuron-col:nth-child(3) .neuron:nth-child(4) { animation-delay: 0.5s; }
+
+.neuron-col:nth-child(5) .neuron:nth-child(1) { animation-delay: 0.4s; }
+.neuron-col:nth-child(5) .neuron:nth-child(2) { animation-delay: 0.5s; }
+.neuron-col:nth-child(5) .neuron:nth-child(3) { animation-delay: 0.6s; }
+
+.connections {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 40px;
+}
+
+.conn {
+  height: 2px;
+  background: linear-gradient(90deg, 
+    rgba(102, 126, 234, 0.2) 0%, 
+    rgba(102, 126, 234, 0.8) 50%, 
+    rgba(102, 126, 234, 0.2) 100%);
+  animation: flow 1s ease-in-out infinite;
+}
+
+.conn:nth-child(1) { animation-delay: 0s; }
+.conn:nth-child(2) { animation-delay: 0.15s; }
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); opacity: 0.7; }
+  50% { transform: scale(1.2); opacity: 1; }
+}
+
+@keyframes flow {
+  0% { opacity: 0.3; transform: scaleX(0.6); }
+  50% { opacity: 1; transform: scaleX(1); }
+  100% { opacity: 0.3; transform: scaleX(0.6); }
+}
+
+.loading-text {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 25px;
+}
+
+.main-text {
+  font-size: 24px;
+  font-weight: 700;
+  background: linear-gradient(90deg, #667eea, #764ba2, #7ed6df);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: gradient 3s ease infinite;
+}
+
+.status-text {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.7);
+  letter-spacing: 0.5px;
+}
+
+@keyframes gradient {
+  0% { background-position: 0% center; }
+  100% { background-position: 200% center; }
+}
+
+.progress-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.progress-bar-bg {
+  width: 280px;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #667eea, #764ba2);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.progress-percent {
+  font-size: 32px;
+  font-weight: 700;
+  color: #667eea;
+  text-shadow: 0 0 20px rgba(102, 126, 234, 0.5);
+}

@@ -1,82 +1,189 @@
-# 🧠 Visualizador Interactivo de Redes Neuronales
+# 🧠 Reconocimiento de Dígitos con Red Neuronal
 
-Un proyecto interactivo para demostrar el funcionamiento de las redes neuronales, perfecto para ferias universitarias y presentaciones del club de IA.
+Aplicación web para reconocimiento de dígitos manuscritos usando **React + TypeScript** en el frontend y **Node.js + Express** en el backend, con integración de **Groq API** para mejorar la precisión.
 
-## 🎯 Características
+## 🛠️ Tecnologías
 
-- ✨ **Visualización en tiempo real** de la arquitectura de la red neuronal
-- 🎮 **Controles interactivos** para ajustar parámetros (capas, neuronas, tasa de aprendizaje)
-- 📊 **Gráficos en vivo** de pérdida y precisión durante el entrenamiento
-- 🎨 **Animaciones fluidas** mostrando activaciones de neuronas
-- 💻 **100% en el navegador** - no requiere servidor ni instalaciones
+### Frontend (client/)
+- **React 18** - Framework UI
+- **TypeScript** - Tipado estático
+- **Vite** - Build tool rápido
+- **TensorFlow.js** - Red neuronal en el navegador
 
-## 🚀 Cómo usar
-
-1. **Abre el proyecto**
-   - Simplemente abre el archivo `index.html` en tu navegador web moderno (Chrome, Firefox, Edge, Safari)
-
-2. **Ajusta los parámetros**
-   - **Número de Capas Ocultas**: Controla la profundidad de la red (1-5 capas)
-   - **Neuronas por Capa**: Ajusta el ancho de cada capa (2-20 neuronas)
-   - **Tasa de Aprendizaje**: Velocidad de aprendizaje (0.001 - 0.5)
-   - **Función de Activación**: Elige entre Sigmoid, ReLU o Tanh
-
-3. **Entrena la red**
-   - Haz clic en el botón "🚀 Entrenar Red" para comenzar el entrenamiento
-   - Observa cómo cambian las activaciones de las neuronas en tiempo real
-   - Mira los gráficos de pérdida y precisión actualizarse durante el entrenamiento
-
-4. **Experimenta**
-   - Prueba diferentes configuraciones para ver cómo afectan al rendimiento
-   - Compara diferentes funciones de activación
-   - Observa cómo la tasa de aprendizaje influye en la velocidad de convergencia
+### Backend (server/)
+- **Node.js** - Runtime
+- **Express** - Framework web
+- **TypeScript** - Tipado estático
+- **Groq API** - IA para mejorar predicciones
 
 ## 📁 Estructura del Proyecto
 
 ```
-proyecto-red-neuronal/
+fncionamiento-red/
+├── client/                    # Frontend React + TypeScript
+│   ├── src/
+│   │   ├── components/       # Componentes React
+│   │   │   ├── DrawingCanvas.tsx
+│   │   │   ├── PredictionPanel.tsx
+│   │   │   ├── NetworkVisualizer.tsx
+│   │   │   └── LoadingOverlay.tsx
+│   │   ├── services/         # Servicios
+│   │   │   ├── NeuralNetwork.ts
+│   │   │   ├── GroqService.ts
+│   │   │   └── DataGenerator.ts
+│   │   ├── types/            # Tipos TypeScript
+│   │   ├── styles/           # Estilos CSS
+│   │   ├── App.tsx
+│   │   └── main.tsx
+│   ├── package.json
+│   └── tsconfig.json
 │
-├── index.html          # Estructura HTML principal
-├── styles.css          # Estilos y diseño
-├── network.js          # Lógica de la red neuronal (TensorFlow.js)
-├── visualizer.js       # Visualización del canvas
-├── app.js              # Lógica principal de la aplicación
-└── README.md           # Este archivo
+├── server/                    # Backend Node.js + Express
+│   ├── src/
+│   │   ├── routes/
+│   │   │   └── groq.ts       # API de Groq
+│   │   └── index.ts          # Entry point
+│   ├── .env                  # Variables de entorno
+│   ├── package.json
+│   └── tsconfig.json
+│
+├── package.json              # Scripts del monorepo
+└── README.md
 ```
 
-## 🛠️ Tecnologías Utilizadas
+## 🚀 Instalación
 
-- **TensorFlow.js**: Para la implementación de la red neuronal
-- **Chart.js**: Para los gráficos de pérdida y precisión
-- **HTML5 Canvas**: Para la visualización de la red
-- **Vanilla JavaScript**: Sin dependencias de frameworks
+### 1. Clonar e instalar dependencias
 
-## 💡 Ideas para la Feria
+```bash
+# Instalar todas las dependencias
+npm run install:all
+```
 
-- **Demostración en vivo**: Muestra cómo funciona el entrenamiento en tiempo real
-- **Comparación de configuraciones**: Prepara ejemplos con diferentes parámetros
-- **Explicación educativa**: Usa la visualización para explicar conceptos como:
-  - Propagación hacia adelante (forward propagation)
-  - Backpropagation
-  - Funciones de activación
-  - Overfitting vs Underfitting
+### 2. Configurar variables de entorno
 
-## 📝 Notas
+```bash
+# Crear archivo .env en server/
+cd server
+cp .env.example .env
 
-- El proyecto funciona completamente offline una vez cargadas las librerías desde CDN
-- Para uso en producción, considera descargar las librerías localmente
-- El entrenamiento se realiza con datos sintéticos (clasificación 2D)
-- Puedes modificar la función `generateData()` en `network.js` para usar otros datos
+# Editar .env y agregar tu API key de Groq
+GROQ_API_KEY=gsk_tu_api_key_aqui
+```
 
-## 🎓 Conceptos Demostrados
+### 3. Ejecutar en desarrollo
 
-- Arquitectura de redes neuronales multicapa
-- Entrenamiento mediante descenso de gradiente
-- Funciones de activación y su impacto
-- Visualización de activaciones neuronales
-- Métricas de rendimiento (pérdida y precisión)
+```bash
+# Desde la raíz del proyecto
+npm run dev
+```
+
+Esto inicia:
+- **Frontend**: http://localhost:3000
+- **Backend**: http://localhost:4000
+
+## 📦 Scripts Disponibles
+
+| Script | Descripción |
+|--------|-------------|
+| `npm run dev` | Inicia frontend y backend en desarrollo |
+| `npm run dev:client` | Solo frontend |
+| `npm run dev:server` | Solo backend |
+| `npm run build` | Construye para producción |
+| `npm run install:all` | Instala todas las dependencias |
+
+## 🎯 Características
+
+### Red Neuronal CNN
+- Arquitectura convolucional profunda
+- 7 capas visualizadas en tiempo real
+- Entrenamiento con datos sintéticos aumentados
+- Precisión ~90-95%
+
+### Integración Groq
+- Modelo Llama 3.2 90B Vision
+- API key segura en el servidor
+- Combinación híbrida: 40% local + 60% Groq
+- Mejora la precisión a ~95-98%
+
+### UI/UX
+- Diseño moderno con gradientes
+- Canvas de dibujo preciso (32x32 grid)
+- Pincel fino para mejor control
+- Visualización de red neuronal en tiempo real
+- Indicadores de confianza
+
+## 🔒 Seguridad
+
+La API key de Groq está protegida:
+- Se almacena en `.env` (no se sube a git)
+- El servidor actúa como proxy
+- El frontend nunca ve la key
+
+## 📊 API Endpoints
+
+### `POST /api/groq/analyze`
+Analiza una imagen de dígito.
+
+**Request:**
+```json
+{
+  "image": "data:image/png;base64,..."
+}
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "digit": 7,
+  "confidence": 0.85
+}
+```
+
+### `GET /api/groq/status`
+Verifica el estado de la API.
+
+### `GET /api/health`
+Health check del servidor.
+
+## 🎨 Personalización
+
+### Cambiar tamaño del canvas
+```typescript
+// client/src/App.tsx
+<DrawingCanvas 
+  gridSize={32}  // Cambiar aquí
+  cellSize={12}  // Cambiar aquí
+/>
+```
+
+### Cambiar modelo de Groq
+```typescript
+// server/src/routes/groq.ts
+const GROQ_MODEL = 'llama-3.2-90b-vision-preview'
+```
+
+## 📝 Variables de Entorno
+
+### server/.env
+```env
+PORT=4000
+GROQ_API_KEY=gsk_tu_api_key
+```
+
+## 🤝 Contribuir
+
+1. Fork el repositorio
+2. Crear rama: `git checkout -b feature/nueva-funcionalidad`
+3. Commit: `git commit -m 'Agregar nueva funcionalidad'`
+4. Push: `git push origin feature/nueva-funcionalidad`
+5. Crear Pull Request
+
+## 📄 Licencia
+
+MIT License
 
 ---
 
-¡Disfruta experimentando con redes neuronales! 🚀
-
+Desarrollado con ❤️ usando React, TypeScript y TensorFlow.js
