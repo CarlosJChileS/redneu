@@ -3,10 +3,10 @@ import '../styles/PredictionPanel.css'
 
 const PredictionPanel: React.FC<PredictionPanelProps> = ({ prediction, thumbnailData }) => {
   const getConfidenceColor = (confidence: number): string => {
-    if (confidence >= 0.9) return '#28a745'
-    if (confidence >= 0.7) return '#667eea'
-    if (confidence >= 0.5) return '#ffc107'
-    return '#dc3545'
+    if (confidence >= 0.9) return '#00C9B1'  // Turquesa brillante
+    if (confidence >= 0.7) return '#FFB84C'  // Amarillo dorado
+    if (confidence >= 0.5) return '#FF8E53'  // Naranja
+    return '#FF5252'  // Rojo coral
   }
 
   const getConfidenceLabel = (confidence: number): string => {
@@ -66,7 +66,7 @@ const PredictionPanel: React.FC<PredictionPanelProps> = ({ prediction, thumbnail
                       width: `${prob * 100}%`,
                       background: idx === prediction.predictedDigit 
                         ? getConfidenceColor(prediction.confidence)
-                        : '#667eea'
+                        : '#FF6B6B'
                     }}
                   />
                 </div>

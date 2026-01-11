@@ -1,8 +1,9 @@
 .prediction-panel {
-  background: linear-gradient(145deg, #1a1a2e 0%, #0f0f1a 100%);
-  border-radius: 12px;
-  padding: 12px;
-  border: 1px solid rgba(102, 126, 234, 0.2);
+  background: linear-gradient(145deg, #ffffff 0%, #f8f9fa 100%);
+  border-radius: 16px;
+  padding: 14px;
+  border: 2px solid rgba(255, 184, 76, 0.3);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -10,10 +11,10 @@
 }
 
 .prediction-panel .panel-label {
-  color: #667eea;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 1px;
+  color: #FFB84C;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
   text-transform: uppercase;
 }
 
@@ -26,7 +27,7 @@
   font-size: 64px;
   font-weight: 800;
   line-height: 1;
-  text-shadow: 0 0 30px currentColor;
+  text-shadow: 0 4px 20px currentColor;
 }
 
 .confidence-section {
@@ -38,18 +39,19 @@
 }
 
 .confidence-badge {
-  padding: 4px 10px;
-  border-radius: 15px;
+  padding: 5px 12px;
+  border-radius: 20px;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.5px;
   color: white;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15);
 }
 
 .confidence-value {
   font-size: 18px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.9);
+  font-weight: 700;
+  color: #2D3436;
 }
 
 .waiting {
@@ -57,7 +59,7 @@
   flex-direction: column;
   align-items: center;
   gap: 10px;
-  color: rgba(255, 255, 255, 0.4);
+  color: #a0aec0;
   padding: 20px 0;
 }
 
@@ -69,14 +71,14 @@
   flex: 1;
   overflow: hidden;
   padding-top: 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-top: 2px solid rgba(0, 0, 0, 0.06);
 }
 
 .probs-label {
   display: block;
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 9px;
-  font-weight: 600;
+  color: #718096;
+  font-size: 10px;
+  font-weight: 700;
   letter-spacing: 1px;
   margin-bottom: 8px;
 }
@@ -84,7 +86,7 @@
 .prob-grid {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
 }
 
 .prob-item {
@@ -98,44 +100,45 @@
 }
 
 .prob-digit {
-  width: 16px;
-  font-size: 12px;
+  width: 18px;
+  font-size: 13px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.7);
+  color: #4a5568;
   text-align: center;
 }
 
 .prob-item.winner .prob-digit {
-  color: #28a745;
+  color: #00C9B1;
   font-weight: 800;
 }
 
 .prob-bar-container {
   flex: 1;
-  height: 6px;
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 3px;
+  height: 8px;
+  background: rgba(0, 0, 0, 0.06);
+  border-radius: 4px;
   overflow: hidden;
 }
 
 .prob-bar {
   height: 100%;
-  border-radius: 3px;
+  border-radius: 4px;
   transition: width 0.2s;
   min-width: 2px;
 }
 
 .prob-value {
-  width: 32px;
-  font-size: 10px;
-  color: rgba(255, 255, 255, 0.5);
+  width: 36px;
+  font-size: 11px;
+  color: #718096;
   text-align: right;
-  font-family: monospace;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 500;
 }
 
 .prob-item.winner .prob-value {
-  color: #28a745;
-  font-weight: 600;
+  color: #00C9B1;
+  font-weight: 700;
 }
 
 .thumbnail-section {

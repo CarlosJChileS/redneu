@@ -10,7 +10,7 @@ html, body, #root {
 }
 
 body {
-  font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
-  background: linear-gradient(135deg, #0d0d1a 0%, #1a1a2e 50%, #0d0d1a 100%);
-  color: #fff;
+  font-family: 'Poppins', 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: linear-gradient(135deg, #f8f9fa 0%, #e8f4f8 50%, #fff5f5 100%);
+  color: #2D3436;
 }

@@ -16,6 +16,7 @@ function App() {
   const [thumbnailData, setThumbnailData] = useState<string | null>(null)
   const [loadingProgress, setLoadingProgress] = useState(0)
   const [loadingStatus, setLoadingStatus] = useState('Iniciando...')
+  const [isRetraining, setIsRetraining] = useState(false)
 
   useEffect(() => {
     const initNetwork = async () => {
@@ -72,6 +73,29 @@ function App() {
     setThumbnailData(null)
   }, [])
 
+  const handleRetrain = useCallback(async () => {
+    if (!networkRef.current || isRetraining) return
+    
+    setIsRetraining(true)
+    setIsLoading(true)
+    setLoadingProgress(0)
+    setLoadingStatus('Preparando re-entrenamiento...')
+    setPrediction(null)
+    setThumbnailData(null)
+    
+    try {
+      const success = await networkRef.current.retrainModel()
+      if (success) {
+        setIsReady(true)
+      }
+    } catch (error) {
+      console.error('Error re-entrenando:', error)
+    } finally {
+      setIsLoading(false)
+      setIsRetraining(false)
+    }
+  }, [isRetraining])
+
   return (
     <div className="app">
       {isLoading && <LoadingOverlay progress={loadingProgress} status={loadingStatus} />}
@@ -91,9 +115,19 @@ function App() {
               cellSize={10}
               disabled={!isReady}
             />
-            <button className="btn-clear" onClick={handleClear} disabled={!isReady}>
-              🔄 LIMPIAR
-            </button>
+            <div className="button-row">
+              <button className="btn-clear" onClick={handleClear} disabled={!isReady}>
+                🔄 LIMPIAR
+              </button>
+              <button 
+                className="btn-retrain" 
+                onClick={handleRetrain} 
+                disabled={!isReady || isRetraining}
+                title="Re-entrena el modelo desde cero"
+              >
+                🧠 RE-ENTRENAR
+              </button>
+            </div>
           </div>
         </div>
         

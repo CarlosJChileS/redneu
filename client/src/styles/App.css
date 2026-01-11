@@ -27,24 +27,54 @@
   gap: 10px;
 }
 
+.button-row {
+  display: flex;
+  gap: 8px;
+}
+
 .btn-clear {
-  padding: 12px 20px;
-  font-size: 14px;
+  flex: 1;
+  padding: 12px 16px;
+  font-size: 13px;
   font-weight: 600;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #FF6B6B 0%, #FF8E53 100%);
   color: white;
   border: none;
   border-radius: 10px;
   cursor: pointer;
   transition: all 0.2s;
+  box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3);
 }
 
 .btn-clear:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(255, 107, 107, 0.45);
 }
 
 .btn-clear:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-retrain {
+  padding: 12px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  background: linear-gradient(135deg, #00C9B1 0%, #00E5CC 100%);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 4px 15px rgba(0, 201, 177, 0.3);
+}
+
+.btn-retrain:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 201, 177, 0.45);
+}
+
+.btn-retrain:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
