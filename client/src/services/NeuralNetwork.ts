@@ -3,15 +3,49 @@ import { PredictionResult } from '../types'
 
 const MODEL_STORAGE_KEY = 'indexeddb://digit-recognition-model'
 const MODEL_VERSION_KEY = 'digit-model-version'
-const CURRENT_MODEL_VERSION = '2.0.0' // Versión mejorada para escritura irregular
+const CURRENT_MODEL_VERSION = '9.0.0' // Modelo eficiente, no congela
 
 // URL del servidor API
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000'
+
+// Singleton para evitar múltiples instancias
+let instance: NeuralNetwork | null = null
+let isInitializing = false
+let isTraining = false
+let initCount = 0
 
 export class NeuralNetwork {
   private model: tf.Sequential | null = null
   public isReady = false
   public onProgress: ((progress: number, status: string) => void) | null = null
+
+  // Obtener instancia singleton
+  static getInstance(): NeuralNetwork {
+    if (!instance) {
+      // Resetear flags cuando se crea nueva instancia
+      isInitializing = false
+      isTraining = false
+      initCount = 0
+      instance = new NeuralNetwork()
+    }
+    return instance
+  }
+  
+  // Resetear para nueva sesión
+  static reset(): void {
+    instance = null
+    isInitializing = false
+    isTraining = false
+    initCount = 0
+  }
+
+  // Detener entrenamiento en progreso
+  private stopTraining(): void {
+    if (this.model && isTraining) {
+      console.log('⏹️ Deteniendo entrenamiento anterior...')
+      this.model.stopTraining = true
+    }
+  }
 
   private updateProgress(progress: number, status: string) {
     if (this.onProgress) {
@@ -20,14 +54,46 @@ export class NeuralNetwork {
   }
 
   private async yieldToUI(): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, 0))
+    return new Promise(resolve => setTimeout(resolve, 10))
   }
 
   async initialize(): Promise<boolean> {
+    initCount++
+    const myInitCount = initCount
+    
+    // Si ya está listo, retornar inmediatamente
+    if (this.isReady && this.model) {
+      console.log('✅ Modelo ya está listo')
+      return true
+    }
+    
+    // Solo permitir la primera inicialización
+    if (isInitializing && myInitCount > 1) {
+      console.log(`⏳ Esperando inicialización (intento #${myInitCount})...`)
+      // Esperar a que la primera termine
+      while (isInitializing && !this.isReady) {
+        await new Promise(resolve => setTimeout(resolve, 500))
+      }
+      return this.isReady
+    }
+    
+    isInitializing = true
+    console.log(`🚀 Inicializando (intento #${myInitCount})...`)
+    
     try {
       this.updateProgress(5, 'Iniciando TensorFlow...')
-      await tf.setBackend('webgl').catch(() => tf.setBackend('cpu'))
-      await tf.ready()
+      
+      // Intentar WebGL primero, si falla usar CPU
+      try {
+        await tf.setBackend('webgl')
+        await tf.ready()
+        console.log('✅ Usando backend WebGL (GPU)')
+      } catch (e) {
+        console.log('⚠️ WebGL no disponible, usando CPU...')
+        await tf.setBackend('cpu')
+        await tf.ready()
+        console.log('✅ Usando backend CPU')
+      }
       
       // 1. Primero intentar cargar del SERVIDOR (MongoDB)
       this.updateProgress(10, 'Buscando modelo en servidor...')
@@ -70,9 +136,11 @@ export class NeuralNetwork {
 
       this.updateProgress(100, '¡Listo!')
       this.isReady = true
+      isInitializing = false
       return true
     } catch (e) {
       console.error('❌', e)
+      isInitializing = false
       return false
     }
   }
@@ -265,27 +333,100 @@ export class NeuralNetwork {
 
   async retrainModel(): Promise<boolean> {
     try {
+      console.log('🔄 Iniciando re-entrenamiento...')
+      
+      // Si hay entrenamiento en progreso, no permitir
+      if (isTraining) {
+        console.log('⚠️ Hay un entrenamiento en progreso. Espera a que termine.')
+        this.updateProgress(0, 'Espera a que termine el entrenamiento actual...')
+        return false
+      }
+      
+      this.isReady = false
+
       // Eliminar modelo local
       try {
         await tf.io.removeModel(MODEL_STORAGE_KEY)
         localStorage.removeItem(MODEL_VERSION_KEY)
+        console.log('🗑️ Modelo local eliminado')
       } catch {
-        // Ignorar
+        console.log('⚠️ No había modelo local')
       }
 
       // Eliminar modelo del servidor
       try {
         await fetch(`${API_URL}/api/model`, { method: 'DELETE' })
+        console.log('🗑️ Modelo del servidor eliminado')
       } catch {
-        // Ignorar si el servidor no está disponible
+        console.log('⚠️ No se pudo eliminar del servidor')
       }
 
-      this.model = null
-      this.isReady = false
+      // Crear modelo nuevo directamente (sin pasar por initialize)
+      console.log('🆕 Creando modelo nuevo...')
+      this.updateProgress(18, 'Limpiando memoria...')
+      await this.yieldToUI()
+      
+      // Liberar modelo anterior si existe
+      if (this.model) {
+        try {
+          this.model.dispose()
+        } catch (e) {
+          // Ignorar
+        }
+        this.model = null
+      }
+      
+      // Limpiar memoria de TensorFlow
+      tf.disposeVariables()
+      
+      // Forzar garbage collection de WebGL
+      try {
+        const backend = tf.backend()
+        if (backend && 'dispose' in backend) {
+          // @ts-ignore
+          backend.dispose()
+        }
+      } catch (e) {
+        // Ignorar
+      }
+      
+      // Reiniciar backend
+      try {
+        await tf.setBackend('webgl')
+        await tf.ready()
+      } catch (e) {
+        console.log('⚠️ WebGL falló, usando CPU...')
+        await tf.setBackend('cpu')
+        await tf.ready()
+      }
+      
+      this.updateProgress(20, 'Creando modelo CNN...')
+      await this.yieldToUI()
+      
+      // Crear modelo nuevo
+      this.model = this.buildModel()
+      
+      this.updateProgress(20, 'Generando datos...')
+      await this.yieldToUI()
+      await this.train()
 
-      return await this.initialize()
+      // Guardar localmente
+      this.updateProgress(94, 'Guardando modelo local...')
+      await this.saveModel()
+
+      // Intentar subir al servidor
+      this.updateProgress(97, 'Subiendo al servidor...')
+      await this.uploadToServer()
+
+      this.updateProgress(100, '¡Listo!')
+      this.isReady = true
+      isInitializing = false
+      
+      return true
     } catch (error) {
-      console.error('Error re-entrenando:', error)
+      console.error('❌ Error re-entrenando:', error)
+      isTraining = false
+      isInitializing = false
       return false
     }
   }
@@ -293,6 +434,7 @@ export class NeuralNetwork {
   private buildModel(): tf.Sequential {
     const m = tf.sequential()
     
+    // MODELO EFICIENTE - Buen balance precisión/velocidad
     m.add(tf.layers.conv2d({
       inputShape: [28, 28, 1],
       filters: 32,
@@ -300,23 +442,9 @@ export class NeuralNetwork {
       activation: 'relu',
       padding: 'same'
     }))
-    m.add(tf.layers.batchNormalization())
-    m.add(tf.layers.conv2d({
-      filters: 32,
-      kernelSize: 3,
-      activation: 'relu',
-      padding: 'same'
-    }))
     m.add(tf.layers.maxPooling2d({ poolSize: 2 }))
-    m.add(tf.layers.dropout({ rate: 0.25 }))
+    m.add(tf.layers.dropout({ rate: 0.2 }))
     
-    m.add(tf.layers.conv2d({
-      filters: 64,
-      kernelSize: 3,
-      activation: 'relu',
-      padding: 'same'
-    }))
-    m.add(tf.layers.batchNormalization())
     m.add(tf.layers.conv2d({
       filters: 64,
       kernelSize: 3,
@@ -327,8 +455,8 @@ export class NeuralNetwork {
     m.add(tf.layers.dropout({ rate: 0.25 }))
     
     m.add(tf.layers.flatten())
-    m.add(tf.layers.dense({ units: 256, activation: 'relu' }))
-    m.add(tf.layers.dropout({ rate: 0.5 }))
+    m.add(tf.layers.dense({ units: 128, activation: 'relu' }))
+    m.add(tf.layers.dropout({ rate: 0.4 }))
     m.add(tf.layers.dense({ units: 10, activation: 'softmax' }))
 
     m.compile({
@@ -341,32 +469,55 @@ export class NeuralNetwork {
   }
 
   private async train(): Promise<void> {
-    if (!this.model) return
+    if (!this.model) {
+      console.error('❌ No hay modelo para entrenar')
+      return
+    }
 
+    // Verificar si ya hay un entrenamiento en progreso
+    if (isTraining) {
+      console.log('⚠️ Ya hay un entrenamiento en progreso')
+      throw new Error('Ya hay un entrenamiento en progreso')
+    }
+
+    isTraining = true
+    console.log('🎯 Iniciando entrenamiento...')
     this.updateProgress(22, 'Generando estilos de escritura...')
     await this.yieldToUI()
     
-    const { xs, ys } = await this.createDatasetAsync()
-    
-    const totalEpochs = 20
-    
-    await this.model.fit(xs, ys, {
-      epochs: totalEpochs,
-      batchSize: 64,
-      shuffle: true,
-      validationSplit: 0.15,
-      callbacks: {
-        onEpochEnd: async (epoch, logs) => {
-          const progress = 25 + ((epoch + 1) / totalEpochs) * 65
-          const acc = ((logs?.acc || 0) * 100).toFixed(0)
-          this.updateProgress(progress, `Época ${epoch + 1}/${totalEpochs} (${acc}%)`)
-          await this.yieldToUI()
+    try {
+      console.log('📊 Generando dataset...')
+      const { xs, ys } = await this.createDatasetAsync()
+      console.log(`✅ Dataset creado: xs=${xs.shape}, ys=${ys.shape}`)
+      
+      const totalEpochs = 20 // Balance precisión/velocidad
+      
+      console.log('🏋️ Iniciando fit()...')
+      await this.model.fit(xs, ys, {
+        epochs: totalEpochs,
+        batchSize: 32, // Más pequeño para no congelar
+        shuffle: true,
+        validationSplit: 0.15,
+        callbacks: {
+          onEpochEnd: async (epoch, logs) => {
+            const progress = 25 + ((epoch + 1) / totalEpochs) * 65
+            const acc = ((logs?.acc || 0) * 100).toFixed(0)
+            console.log(`📈 Época ${epoch + 1}/${totalEpochs} - acc: ${acc}%`)
+            this.updateProgress(progress, `Época ${epoch + 1}/${totalEpochs} (${acc}%)`)
+            await this.yieldToUI()
+          }
         }
-      }
-    })
+      })
+      console.log('✅ Entrenamiento completado')
 
-    xs.dispose()
-    ys.dispose()
+      xs.dispose()
+      ys.dispose()
+      isTraining = false
+    } catch (error) {
+      console.error('❌ Error en entrenamiento:', error)
+      isTraining = false
+      throw error
+    }
   }
 
   private async createDatasetAsync(): Promise<{ xs: tf.Tensor4D; ys: tf.Tensor2D }> {
@@ -374,26 +525,34 @@ export class NeuralNetwork {
     const Y: number[][] = []
     
     const templates = this.getAllTemplates()
-    const samplesPerDigit = 600 // Más muestras para mejor generalización
+    const samplesPerDigit = 300 // Más ligero para no congelar
     
     for (let d = 0; d < 10; d++) {
       const digitTemplates = templates[d]
       
       for (let i = 0; i < samplesPerDigit; i++) {
         const t = digitTemplates[Math.floor(Math.random() * digitTemplates.length)]
-        // Alternar entre estilos normales y "messy" (desordenados)
-        const style = i % 3 === 0 ? this.getMessyStyle() : this.getRandomStyle()
+        // 70% números mal escritos para máximo reconocimiento
+        const style = Math.random() < 0.7 ? this.getMessyStyle() : this.getRandomStyle()
         X.push(this.renderWithStyle(t, style))
         
         const label = new Array(10).fill(0)
         label[d] = 1
         Y.push(label)
+        
+        // Ceder control cada 10 muestras
+        if (i % 10 === 0) {
+          await this.yieldToUI()
+        }
       }
       
       this.updateProgress(22 + (d / 10) * 3, `Dígito ${d}...`)
       await this.yieldToUI()
     }
 
+    console.log(`📦 Dataset: ${X.length} muestras`)
+
+    // Shuffle simple
     for (let i = X.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1))
       ;[X[i], X[j]] = [X[j], X[i]]
@@ -405,47 +564,81 @@ export class NeuralNetwork {
 
   private getRandomStyle(): WritingStyle {
     const styles: WritingStyle[] = [
-      { scale: 2.8, thickness: 0.9, shearX: 0, shearY: 0, stretchX: 1, stretchY: 1, blur: 0, noise: 0 },
-      { scale: 2.0, thickness: 1.0, shearX: 0, shearY: 0, stretchX: 1, stretchY: 1, blur: 0, noise: 0 },
-      { scale: 3.8, thickness: 0.8, shearX: 0, shearY: 0, stretchX: 1, stretchY: 1, blur: 0, noise: 0 },
-      { scale: 2.8, thickness: 0.85, shearX: 0.25, shearY: 0, stretchX: 0.9, stretchY: 1, blur: 0, noise: 0 },
-      { scale: 2.8, thickness: 0.85, shearX: -0.2, shearY: 0, stretchX: 0.9, stretchY: 1, blur: 0, noise: 0 },
-      { scale: 2.5, thickness: 0.9, shearX: 0, shearY: 0, stretchX: 1.3, stretchY: 1, blur: 0, noise: 0 },
-      { scale: 2.5, thickness: 0.85, shearX: 0, shearY: 0, stretchX: 1, stretchY: 1.3, blur: 0, noise: 0 },
-      { scale: 2.8, thickness: 0.55, shearX: 0, shearY: 0, stretchX: 1, stretchY: 1, blur: 0, noise: 0 },
-      { scale: 2.8, thickness: 1.2, shearX: 0, shearY: 0, stretchX: 1, stretchY: 1, blur: 0.5, noise: 0 },
-      { scale: 3.0, thickness: 0.8, shearX: 0, shearY: 0, stretchX: 0.7, stretchY: 1, blur: 0, noise: 0 },
-      { scale: 3.0, thickness: 0.85, shearX: 0, shearY: 0, stretchX: 1.4, stretchY: 0.9, blur: 0, noise: 0 },
-      { scale: 2.6, thickness: 0.7, shearX: 0.15, shearY: 0.05, stretchX: 1.1, stretchY: 1, blur: 0.3, noise: 0 },
-      { scale: 2.5, thickness: 1.1, shearX: 0, shearY: 0, stretchX: 1, stretchY: 1, blur: 0.2, noise: 0 },
-      { scale: 4.2, thickness: 0.7, shearX: 0, shearY: 0, stretchX: 1, stretchY: 1, blur: 0, noise: 0 },
+      // Estilos con GROSOR ALTO (como dibuja el usuario)
+      { scale: 3.0, thickness: 1.2, shearX: 0, shearY: 0, stretchX: 1, stretchY: 1, blur: 0.3, noise: 0 },
+      { scale: 2.5, thickness: 1.3, shearX: 0, shearY: 0, stretchX: 1, stretchY: 1, blur: 0.2, noise: 0 },
+      { scale: 3.5, thickness: 1.1, shearX: 0, shearY: 0, stretchX: 1, stretchY: 1, blur: 0.3, noise: 0 },
+      { scale: 3.0, thickness: 1.2, shearX: 0.15, shearY: 0, stretchX: 0.95, stretchY: 1, blur: 0.2, noise: 0 },
+      { scale: 3.0, thickness: 1.2, shearX: -0.15, shearY: 0, stretchX: 0.95, stretchY: 1, blur: 0.2, noise: 0 },
+      { scale: 2.8, thickness: 1.25, shearX: 0, shearY: 0, stretchX: 1.1, stretchY: 1, blur: 0.25, noise: 0 },
+      { scale: 2.8, thickness: 1.2, shearX: 0, shearY: 0, stretchX: 1, stretchY: 1.1, blur: 0.25, noise: 0 },
+      { scale: 3.2, thickness: 1.0, shearX: 0, shearY: 0, stretchX: 1, stretchY: 1, blur: 0.3, noise: 0 },
+      { scale: 2.6, thickness: 1.4, shearX: 0, shearY: 0, stretchX: 1, stretchY: 1, blur: 0.4, noise: 0 },
+      { scale: 3.3, thickness: 1.1, shearX: 0, shearY: 0, stretchX: 0.9, stretchY: 1, blur: 0.2, noise: 0 },
+      { scale: 3.3, thickness: 1.15, shearX: 0, shearY: 0, stretchX: 1.15, stretchY: 0.95, blur: 0.25, noise: 0 },
+      { scale: 2.8, thickness: 1.1, shearX: 0.1, shearY: 0, stretchX: 1.05, stretchY: 1, blur: 0.3, noise: 0.05 },
+      { scale: 2.7, thickness: 1.3, shearX: 0, shearY: 0, stretchX: 1, stretchY: 1, blur: 0.35, noise: 0 },
+      { scale: 4.0, thickness: 1.0, shearX: 0, shearY: 0, stretchX: 1, stretchY: 1, blur: 0.2, noise: 0 },
     ]
     
     const base = styles[Math.floor(Math.random() * styles.length)]
     
     return {
-      scale: base.scale + (Math.random() - 0.5) * 0.8,
-      thickness: base.thickness + (Math.random() - 0.5) * 0.25,
+      scale: base.scale + (Math.random() - 0.5) * 0.6,
+      thickness: Math.max(0.8, base.thickness + (Math.random() - 0.5) * 0.3),
       shearX: base.shearX + (Math.random() - 0.5) * 0.2,
-      shearY: base.shearY + (Math.random() - 0.5) * 0.15,
-      stretchX: base.stretchX + (Math.random() - 0.5) * 0.3,
-      stretchY: base.stretchY + (Math.random() - 0.5) * 0.3,
-      blur: base.blur + Math.random() * 0.3,
+      shearY: base.shearY + (Math.random() - 0.5) * 0.1,
+      stretchX: Math.max(0.7, base.stretchX + (Math.random() - 0.5) * 0.25),
+      stretchY: Math.max(0.7, base.stretchY + (Math.random() - 0.5) * 0.25),
+      blur: Math.max(0.1, base.blur + Math.random() * 0.3),
       noise: Math.random() * 0.1,
     }
   }
 
-  // Estilo "desordenado" para escritura mal hecha
+  // Estilo "desordenado" para escritura mal hecha - Con GROSOR REALISTA
   private getMessyStyle(): WritingStyle {
+    const messyTypes = [
+      // Inclinado derecha con grosor
+      { scale: 3.0, thickness: 1.1, shearX: 0.4, shearY: 0.05, stretchX: 0.9, stretchY: 1.05, blur: 0.3, noise: 0.1 },
+      // Inclinado izquierda con grosor
+      { scale: 3.0, thickness: 1.15, shearX: -0.35, shearY: -0.05, stretchX: 0.95, stretchY: 1.0, blur: 0.25, noise: 0.1 },
+      // Grande y grueso
+      { scale: 3.8, thickness: 1.3, shearX: 0.1, shearY: 0, stretchX: 1.1, stretchY: 1.1, blur: 0.4, noise: 0.15 },
+      // Estirado horizontal grueso
+      { scale: 3.2, thickness: 1.0, shearX: 0, shearY: 0, stretchX: 1.4, stretchY: 0.85, blur: 0.3, noise: 0.1 },
+      // Estirado vertical grueso
+      { scale: 3.2, thickness: 1.0, shearX: 0, shearY: 0, stretchX: 0.8, stretchY: 1.35, blur: 0.3, noise: 0.1 },
+      // Borroso grueso
+      { scale: 2.8, thickness: 1.2, shearX: 0.1, shearY: 0.05, stretchX: 1, stretchY: 1, blur: 0.6, noise: 0.2 },
+      // Normal grueso
+      { scale: 3.0, thickness: 1.25, shearX: 0.05, shearY: 0, stretchX: 1, stretchY: 1, blur: 0.35, noise: 0.12 },
+      // Distorsionado grueso
+      { scale: 2.8, thickness: 1.1, shearX: 0.25, shearY: 0.15, stretchX: 0.9, stretchY: 1.1, blur: 0.35, noise: 0.15 },
+      // Escritura rápida gruesa
+      { scale: 3.2, thickness: 1.0, shearX: 0.5, shearY: 0.1, stretchX: 1.15, stretchY: 0.95, blur: 0.4, noise: 0.15 },
+      // Escritura irregular gruesa
+      { scale: 3.3, thickness: 1.2, shearX: -0.2, shearY: 0.1, stretchX: 1.05, stretchY: 1.15, blur: 0.45, noise: 0.2 },
+      // Tembloroso grueso
+      { scale: 2.6, thickness: 1.1, shearX: 0.08, shearY: 0.03, stretchX: 0.98, stretchY: 1.02, blur: 0.7, noise: 0.25 },
+      // Comprimido grueso
+      { scale: 2.8, thickness: 1.2, shearX: 0, shearY: 0, stretchX: 0.7, stretchY: 1.15, blur: 0.25, noise: 0.1 },
+      // Expandido grueso
+      { scale: 2.8, thickness: 1.1, shearX: 0, shearY: 0, stretchX: 1.3, stretchY: 0.8, blur: 0.3, noise: 0.1 },
+      // Muy grueso descuidado
+      { scale: 3.0, thickness: 1.5, shearX: -0.15, shearY: 0.08, stretchX: 1.05, stretchY: 1.0, blur: 0.5, noise: 0.2 },
+    ]
+    
+    const base = messyTypes[Math.floor(Math.random() * messyTypes.length)]
+    
     return {
-      scale: 2.0 + Math.random() * 2.5,  // Tamaños muy variados
-      thickness: 0.4 + Math.random() * 0.9,  // Grosor muy variable
-      shearX: (Math.random() - 0.5) * 0.5,  // Mucha inclinación
-      shearY: (Math.random() - 0.5) * 0.3,
-      stretchX: 0.6 + Math.random() * 0.9,  // Muy estirado/comprimido
-      stretchY: 0.6 + Math.random() * 0.9,
-      blur: Math.random() * 0.6,  // Más borroso
-      noise: 0.05 + Math.random() * 0.2,  // Ruido para imperfecciones
+      scale: base.scale + (Math.random() - 0.5) * 0.6,
+      thickness: Math.max(0.8, base.thickness + (Math.random() - 0.5) * 0.3),
+      shearX: base.shearX + (Math.random() - 0.5) * 0.2,
+      shearY: base.shearY + (Math.random() - 0.5) * 0.1,
+      stretchX: Math.max(0.6, base.stretchX + (Math.random() - 0.5) * 0.25),
+      stretchY: Math.max(0.6, base.stretchY + (Math.random() - 0.5) * 0.25),
+      blur: Math.max(0.1, base.blur + (Math.random() - 0.5) * 0.25),
+      noise: Math.max(0, base.noise + Math.random() * 0.1),
     }
   }
 
@@ -454,10 +647,10 @@ export class NeuralNetwork {
     const h = template.length
     const w = template[0].length
     
-    // Más variación en posición
-    const offsetX = (Math.random() - 0.5) * 10
-    const offsetY = (Math.random() - 0.5) * 10
-    const angle = (Math.random() - 0.5) * 0.5  // Más rotación
+    // Menos variación en posición para mejor centrado
+    const offsetX = (Math.random() - 0.5) * 4
+    const offsetY = (Math.random() - 0.5) * 4
+    const angle = (Math.random() - 0.5) * 0.35  // Menos rotación
     
     const cos = Math.cos(angle)
     const sin = Math.sin(angle)
@@ -558,13 +751,21 @@ export class NeuralNetwork {
         this.p(['.##.', '#..#', '#..#', '#..#', '.##.']),
         this.p(['.###.', '#...#', '#...#', '#...#', '.###.']),
         // Mal escritos / irregulares
-        this.p(['..##.', '.#..#', '#...#', '#...#', '.#..#', '..##.']), // Asimétrico
-        this.p(['.###.', '#....', '#...#', '#...#', '.###.']), // Abierto arriba
-        this.p(['.##..', '#..#.', '#...#', '#..#.', '.##..']), // Inclinado
-        this.p(['..#..', '.#.#.', '#...#', '#...#', '.#.#.', '..#..']), // Ovalado raro
-        this.p(['.###.', '#...#', '#....', '#...#', '.###.']), // Gap en medio
-        this.p(['####', '#..#', '#..#', '####']), // Cuadrado
-        this.p(['.#.#.', '#...#', '#...#', '#...#', '.#.#.']), // Abierto arriba/abajo
+        this.p(['..##.', '.#..#', '#...#', '#...#', '.#..#', '..##.']),
+        this.p(['.###.', '#....', '#...#', '#...#', '.###.']),
+        this.p(['.##..', '#..#.', '#...#', '#..#.', '.##..']),
+        this.p(['..#..', '.#.#.', '#...#', '#...#', '.#.#.', '..#..']),
+        this.p(['.###.', '#...#', '#....', '#...#', '.###.']),
+        this.p(['####', '#..#', '#..#', '####']),
+        this.p(['.#.#.', '#...#', '#...#', '#...#', '.#.#.']),
+        // NUEVOS - Más variaciones mal escritas
+        this.p(['..#..', '.#.#.', '#...#', '#...#', '#...#', '.#.#.', '..#..']), // Ovalado alto
+        this.p(['.##.', '#..#', '#..#', '.##.']), // Muy pequeño
+        this.p(['...##', '..#.#', '.#..#', '#...#', '.#..#', '..#.#', '...##']), // Inclinado derecha
+        this.p(['##...', '#.#..', '#..#.', '#...#', '#..#.', '#.#..', '##...']), // Inclinado izquierda
+        this.p(['.###.', '#....', '#....', '#....', '.###.']), // Muy abierto
+        this.p(['#####', '#...#', '#...#', '#...#', '#####']), // Rectangular
+        this.p(['.#.', '#.#', '#.#', '#.#', '.#.']), // Muy estrecho
       ],
       
       // ========== UNO (1) - Incluye palos, con/sin base, inclinados ==========
@@ -576,12 +777,21 @@ export class NeuralNetwork {
         this.p(['.#.', '.#.', '.#.', '.#.', '.#.', '.#.', '.#.']),
         this.p(['##.', '.#.', '.#.', '.#.', '.#.', '.#.', '###']),
         // Mal escritos / irregulares
-        this.p(['..#', '.#.', '.#.', '.#.', '#..', '#..']), // Muy inclinado
-        this.p(['.#', '.#', '#.', '#.', '#.', '#.']), // Inclinado izquierda
-        this.p(['#.', '.#', '.#', '.#', '.#', '#.']), // Curvo
-        this.p(['##', '##', '.#', '.#', '.#', '##']), // Grueso arriba
-        this.p(['.#.', '##.', '.#.', '.#.', '.##', '.#.']), // Irregular
-        this.p(['...#', '..#.', '..#.', '.#..', '.#..', '#...']), // Diagonal
+        this.p(['..#', '.#.', '.#.', '.#.', '#..', '#..']),
+        this.p(['.#', '.#', '#.', '#.', '#.', '#.']),
+        this.p(['#.', '.#', '.#', '.#', '.#', '#.']),
+        this.p(['##', '##', '.#', '.#', '.#', '##']),
+        this.p(['.#.', '##.', '.#.', '.#.', '.##', '.#.']),
+        this.p(['...#', '..#.', '..#.', '.#..', '.#..', '#...']),
+        // NUEVOS - Más variaciones
+        this.p(['.#', '.#', '.#', '.#', '.#']), // Muy corto
+        this.p(['..#..', '..#..', '..#..', '..#..', '..#..', '..#..', '..#..', '..#..']), // Muy largo
+        this.p(['#..', '#..', '#..', '#..', '#..', '###']), // Con base grande
+        this.p(['.##', '..#', '..#', '..#', '..#', '..#']), // Serif arriba
+        this.p(['#', '#', '#', '#', '#']), // Palo simple corto
+        this.p(['..#.', '.#..', '.#..', '#...', '#...', '#...']), // Muy diagonal
+        this.p(['.#.', '.#.', '.#.', '.#.', '###']), // Con base
+        this.p(['##', '.#', '.#', '.#', '.#', '.#', '.#']), // Cabeza grande
       ],
       
       // ========== DOS (2) - Incluye Z, curvas abiertas, angulares ==========
@@ -592,12 +802,20 @@ export class NeuralNetwork {
         this.p(['.##.', '#..#', '...#', '..#.', '.#..', '#...', '####']),
         this.p(['###', '..#', '.#.', '#..', '#..', '###']),
         // Mal escritos / irregulares
-        this.p(['###.', '...#', '..#.', '.#..', '#...', '###.']), // Sin curva arriba
-        this.p(['..##', '....#', '...#.', '..#..', '.#...', '####']), // Pequeño arriba
-        this.p(['.##.', '...#', '..#.', '.#..', '#...', '##..']), // Sin base completa
-        this.p(['###', '..#', '.#.', '.#.', '#..', '###']), // Recto
-        this.p(['.#.', '#.#', '..#', '.#.', '#..', '###']), // Curva rara
-        this.p(['##..', '..#.', '..#.', '.#..', '#...', '####']), // Angular
+        this.p(['###.', '...#', '..#.', '.#..', '#...', '###.']),
+        this.p(['..##', '....#', '...#.', '..#..', '.#...', '####']),
+        this.p(['.##.', '...#', '..#.', '.#..', '#...', '##..']),
+        this.p(['###', '..#', '.#.', '.#.', '#..', '###']),
+        this.p(['.#.', '#.#', '..#', '.#.', '#..', '###']),
+        this.p(['##..', '..#.', '..#.', '.#..', '#...', '####']),
+        // NUEVOS - Más variaciones (confusión con Z, 7)
+        this.p(['####', '...#', '..#.', '.#..', '#...', '####']), // Forma de Z
+        this.p(['.##.', '...#', '..#.', '.#..', '#...', '####']), // Curva pequeña
+        this.p(['###.', '...#', '..##', '.#..', '#...', '####']), // Con bulto medio
+        this.p(['.#..', '#.#.', '..#.', '.#..', '#...', '###.']), // Muy curvo arriba
+        this.p(['..#.', '.#.#', '...#', '..#.', '.#..', '####']), // Loop arriba
+        this.p(['###', '..#', '..#', '.#.', '#..', '###']), // Muy angular
+        this.p(['.##.', '#..#', '...#', '...#', '..#.', '.#..', '####']), // Alto
       ],
       
       // ========== TRES (3) - Incluye 3 abiertos, con curvas irregulares ==========
@@ -608,11 +826,19 @@ export class NeuralNetwork {
         this.p(['###.', '...#', '...#', '.##.', '...#', '...#', '###.']),
         this.p(['###.', '...#', '###.', '...#', '...#', '###.']),
         // Mal escritos / irregulares
-        this.p(['##..', '..#.', '..#.', '.#..', '..#.', '..#.', '##..']), // Muy curvo
-        this.p(['###', '..#', '.#.', '..#', '..#', '###']), // Angular
-        this.p(['.##.', '...#', '..#.', '...#', '...#', '.##.']), // Sin curva superior
-        this.p(['###.', '...#', '.##.', '...#', '..#.', '.#..']), // Abierto abajo
-        this.p(['.#..', '..#.', '.#..', '..#.', '..#.', '.#..']), // Muy ondulado
+        this.p(['##..', '..#.', '..#.', '.#..', '..#.', '..#.', '##..']),
+        this.p(['###', '..#', '.#.', '..#', '..#', '###']),
+        this.p(['.##.', '...#', '..#.', '...#', '...#', '.##.']),
+        this.p(['###.', '...#', '.##.', '...#', '..#.', '.#..']),
+        this.p(['.#..', '..#.', '.#..', '..#.', '..#.', '.#..']),
+        // NUEVOS - Más variaciones (confusión con 8, 9)
+        this.p(['##.', '..#', '##.', '..#', '##.']), // Compacto
+        this.p(['.###', '...#', '..##', '...#', '.###']), // Asimétrico
+        this.p(['###.', '...#', '..#.', '..#.', '...#', '###.']), // Sin cintura clara
+        this.p(['.#.', '#.#', '..#', '.#.', '..#', '#.#', '.#.']), // Muy curvo
+        this.p(['##..', '..#.', '.##.', '..#.', '..#.', '##..']), // Inclinado
+        this.p(['###', '..#', '.#.', '.#.', '..#', '###']), // Con pico medio
+        this.p(['.##.', '...#', '...#', '.##.', '...#', '...#', '.##.']), // Dos círculos
       ],
       
       // ========== CUATRO (4) - Incluye abiertos, cerrados, angulares ==========
@@ -623,11 +849,20 @@ export class NeuralNetwork {
         this.p(['#...#', '#...#', '#####', '....#', '....#', '....#']),
         this.p(['#.#', '#.#', '###', '..#', '..#']),
         // Mal escritos / irregulares
-        this.p(['#..#', '#..#', '####', '...#', '...#']), // Corto
-        this.p(['..#.', '.##.', '#.#.', '####', '..#.', '..#.']), // Con serif
-        this.p(['#...#', '#..#.', '.###.', '...#.', '...#.']), // Cruzado diferente
-        this.p(['.#.#', '#..#', '####', '...#', '...#', '..#.']), // Abierto
-        this.p(['#..', '#.#', '###', '..#', '..#', '..#']), // Muy angular
+        this.p(['#..#', '#..#', '####', '...#', '...#']),
+        this.p(['..#.', '.##.', '#.#.', '####', '..#.', '..#.']),
+        this.p(['#...#', '#..#.', '.###.', '...#.', '...#.']),
+        this.p(['.#.#', '#..#', '####', '...#', '...#', '..#.']),
+        this.p(['#..', '#.#', '###', '..#', '..#', '..#']),
+        // NUEVOS - Más variaciones (confusión con 9, 1)
+        this.p(['#..#', '#..#', '#..#', '####', '...#', '...#', '...#', '...#']), // Muy largo
+        this.p(['#.#', '#.#', '###', '..#']), // Muy corto
+        this.p(['..#.', '.#.#', '#..#', '####', '...#', '...#']), // Con diagonal
+        this.p(['#...#', '#...#', '#...#', '####.', '....#', '....#']), // Asimétrico
+        this.p(['.#..#', '#...#', '#####', '....#', '....#']), // Brazo corto
+        this.p(['#..#', '#..#', '###.', '..#.', '..#.']), // Barra corta
+        this.p(['..#', '.##', '###', '..#', '..#', '..#']), // Solo diagonal
+        this.p(['#....#', '#....#', '######', '.....#', '.....#']), // Muy ancho
       ],
       
       // ========== CINCO (5) - Incluye S invertidas, angulares ==========
@@ -637,11 +872,19 @@ export class NeuralNetwork {
         this.p(['#####', '#....', '#....', '####.', '....#', '....#', '####.']),
         this.p(['####', '#...', '###.', '...#', '...#', '###.']),
         // Mal escritos / irregulares
-        this.p(['####', '#...', '##..', '..#.', '..#.', '##..']), // Curvo
-        this.p(['###.', '#...', '###.', '...#', '..#.', '.#..']), // Abierto abajo
-        this.p(['####', '#...', '#...', '###.', '...#', '###.']), // Más recto
-        this.p(['.###', '.#..', '.##.', '...#', '...#', '.##.']), // Sin esquina
-        this.p(['###', '#..', '##.', '..#', '..#', '#..']), // Muy curvo
+        this.p(['####', '#...', '##..', '..#.', '..#.', '##..']),
+        this.p(['###.', '#...', '###.', '...#', '..#.', '.#..']),
+        this.p(['####', '#...', '#...', '###.', '...#', '###.']),
+        this.p(['.###', '.#..', '.##.', '...#', '...#', '.##.']),
+        this.p(['###', '#..', '##.', '..#', '..#', '#..']),
+        // NUEVOS - Más variaciones (confusión con 6, S)
+        this.p(['###.', '#...', '#...', '##..', '..#.', '..#.', '.#..']), // Cola larga
+        this.p(['####', '#...', '###.', '...#', '###.']), // Compacto
+        this.p(['#####', '#....', '.###.', '....#', '....#', '.###.']), // Con curva
+        this.p(['##..', '#...', '##..', '..#.', '..#.', '##..']), // Pequeño
+        this.p(['####', '#...', '##..', '...#', '...#', '..#.', '.#..']), // S invertida
+        this.p(['###.', '#...', '##..', '..#.', '#..#', '.##.']), // Con loop abajo
+        this.p(['####', '#...', '###.', '...#', '...#', '...#', '.##.']), // Alto
       ],
       
       // ========== SEIS (6) - Incluye 6 abiertos, con loops irregulares ==========
@@ -651,11 +894,19 @@ export class NeuralNetwork {
         this.p(['.##.', '#...', '#...', '###.', '#..#', '#..#', '.##.']),
         this.p(['###.', '#...', '###.', '#..#', '#..#', '###.']),
         // Mal escritos / irregulares
-        this.p(['..#.', '.#..', '#...', '###.', '#..#', '.##.']), // Muy curvo arriba
-        this.p(['.##.', '#...', '##..', '#.#.', '#.#.', '.#..']), // Pequeño abajo
-        this.p(['.#..', '#...', '###.', '#..#', '#..#', '.##.']), // Sin curva
-        this.p(['..##', '.#..', '#...', '##..', '#.#.', '.#..']), // Irregular
-        this.p(['.#.', '#..', '#..', '##.', '#.#', '.#.']), // Muy pequeño
+        this.p(['..#.', '.#..', '#...', '###.', '#..#', '.##.']),
+        this.p(['.##.', '#...', '##..', '#.#.', '#.#.', '.#..']),
+        this.p(['.#..', '#...', '###.', '#..#', '#..#', '.##.']),
+        this.p(['..##', '.#..', '#...', '##..', '#.#.', '.#..']),
+        this.p(['.#.', '#..', '#..', '##.', '#.#', '.#.']),
+        // NUEVOS - Más variaciones (confusión con 0, 8, 9)
+        this.p(['..#..', '.#...', '#....', '###..', '#..#.', '#..#.', '.##..']), // Cola larga arriba
+        this.p(['.##.', '#...', '#...', '##..', '#.#.', '.#..']), // Loop pequeño
+        this.p(['.#..', '#...', '#...', '###.', '#..#', '.##.']), // Sin curva superior
+        this.p(['..#.', '.#..', '#...', '#...', '##..', '#.#.', '.#..']), // Muy largo
+        this.p(['.###.', '#....', '#....', '#....', '####.', '#...#', '.###.']), // Tallo largo
+        this.p(['.#.', '#..', '##.', '#.#', '#.#', '.#.']), // Compacto
+        this.p(['..##.', '.#...', '#....', '####.', '#...#', '.###.']), // Inclinado
       ],
       
       // ========== SIETE (7) - Incluye con/sin barra, muy inclinados ==========
@@ -665,12 +916,20 @@ export class NeuralNetwork {
         this.p(['####', '...#', '...#', '..#.', '..#.', '.#..', '.#..']),
         this.p(['###', '..#', '..#', '.#.', '.#.', '#..']),
         // Mal escritos / irregulares
-        this.p(['####', '...#', '..#.', '..#.', '.#..', '.#..']), // Más vertical
-        this.p(['###.', '..#.', '..#.', '.#..', '.#..', '#...']), // Muy inclinado
-        this.p(['####', '...#', '..#.', '.#..', '#...', '#...']), // Diagonal fuerte
-        this.p(['##', '.#', '.#', '#.', '#.']), // Muy pequeño
-        this.p(['###', '..#', '.#.', '.#.', '#..', '#..']), // Curvo
-        this.p(['####', '..#.', '..#.', '..#.', '.#..', '.#..']), // Casi vertical
+        this.p(['####', '...#', '..#.', '..#.', '.#..', '.#..']),
+        this.p(['###.', '..#.', '..#.', '.#..', '.#..', '#...']),
+        this.p(['####', '...#', '..#.', '.#..', '#...', '#...']),
+        this.p(['##', '.#', '.#', '#.', '#.']),
+        this.p(['###', '..#', '.#.', '.#.', '#..', '#..']),
+        this.p(['####', '..#.', '..#.', '..#.', '.#..', '.#..']),
+        // NUEVOS - Más variaciones (confusión con 1, 2)
+        this.p(['#####', '....#', '....#', '...#.', '...#.', '..#..', '..#..']), // Muy vertical
+        this.p(['###', '..#', '..#', '..#', '.#.', '.#.']), // Casi recto
+        this.p(['####', '...#', '..#.', '..#.', '..#.', '.#..']), // Poco diagonal
+        this.p(['#####', '....#', '...#.', '..#..', '..#..', '..#..']), // Con meseta
+        this.p(['##', '.#', '.#', '.#', '.#', '.#']), // Muy pequeño vertical
+        this.p(['####', '...#', '...#', '..#.', '.#..', '#...']), // Con esquina
+        this.p(['###.', '..#.', '..##', '...#', '...#', '..#.']), // Con serif medio
       ],
       
       // ========== OCHO (8) - Incluye 8 desproporcionados, abiertos ==========
@@ -680,12 +939,21 @@ export class NeuralNetwork {
         this.p(['.##.', '#..#', '#..#', '.##.', '#..#', '#..#', '.##.']),
         this.p(['###.', '#..#', '###.', '#..#', '#..#', '###.']),
         // Mal escritos / irregulares
-        this.p(['.##.', '#..#', '.##.', '#..#', '#..#', '.##.']), // Cintura estrecha
-        this.p(['.#.', '#.#', '.#.', '#.#', '#.#', '.#.']), // Muy estrecho
-        this.p(['.###.', '#...#', '.#.#.', '#...#', '#...#', '.###.']), // Cruz en medio
-        this.p(['.##.', '#..#', '#..#', '.#..', '#..#', '.##.']), // Abierto
-        this.p(['##..', '#.#.', '.##.', '#.#.', '#.#.', '.##.']), // Asimétrico
-        this.p(['.#.', '#.#', '#.#', '.#.', '#.#', '.#.']), // Muy pequeño
+        this.p(['.##.', '#..#', '.##.', '#..#', '#..#', '.##.']),
+        this.p(['.#.', '#.#', '.#.', '#.#', '#.#', '.#.']),
+        this.p(['.###.', '#...#', '.#.#.', '#...#', '#...#', '.###.']),
+        this.p(['.##.', '#..#', '#..#', '.#..', '#..#', '.##.']),
+        this.p(['##..', '#.#.', '.##.', '#.#.', '#.#.', '.##.']),
+        this.p(['.#.', '#.#', '#.#', '.#.', '#.#', '.#.']),
+        // NUEVOS - Más variaciones (confusión con 0, 3, 6, 9)
+        this.p(['.##.', '#..#', '#..#', '#..#', '.##.', '#..#', '.##.']), // Sin cintura
+        this.p(['.###.', '#...#', '.##..', '#...#', '#...#', '.###.']), // Cintura descentrada
+        this.p(['.#..', '#.#.', '.#..', '#.#.', '#.#.', '.#..']), // Inclinado
+        this.p(['.##.', '#..#', '.#..', '..#.', '#..#', '.##.']), // Cruzado raro
+        this.p(['##.', '#.#', '##.', '#.#', '##.']), // Compacto
+        this.p(['.###.', '#...#', '#...#', '..#..', '#...#', '#...#', '.###.']), // Con X medio
+        this.p(['.##..', '#..#.', '.##..', '#..#.', '.##..']), // Muy ancho
+        this.p(['.#.', '#.#', '.#.', '.#.', '#.#', '.#.']), // Cintura muy fina
       ],
       
       // ========== NUEVE (9) - Incluye 9 con colas diferentes, abiertos ==========
@@ -695,12 +963,21 @@ export class NeuralNetwork {
         this.p(['.###.', '#...#', '#...#', '.####', '....#', '....#', '....#']),
         this.p(['####', '#..#', '####', '...#', '...#', '...#']),
         // Mal escritos / irregulares
-        this.p(['.##.', '#..#', '#..#', '.###', '...#', '..#.', '.#..']), // Cola curva
-        this.p(['.##.', '#..#', '.###', '...#', '...#', '..#.']), // Pequeño arriba
-        this.p(['###.', '#..#', '####', '...#', '..#.', '.#..']), // Angular
-        this.p(['.#.', '#.#', '#.#', '.##', '..#', '..#']), // Muy pequeño
-        this.p(['.##.', '#..#', '.##.', '..#.', '..#.', '.#..']), // Sin conexión
-        this.p(['##..', '#.#.', '.##.', '..#.', '..#.', '.#..']), // Asimétrico
+        this.p(['.##.', '#..#', '#..#', '.###', '...#', '..#.', '.#..']),
+        this.p(['.##.', '#..#', '.###', '...#', '...#', '..#.']),
+        this.p(['###.', '#..#', '####', '...#', '..#.', '.#..']),
+        this.p(['.#.', '#.#', '#.#', '.##', '..#', '..#']),
+        this.p(['.##.', '#..#', '.##.', '..#.', '..#.', '.#..']),
+        this.p(['##..', '#.#.', '.##.', '..#.', '..#.', '.#..']),
+        // NUEVOS - Más variaciones (confusión con 4, 6, 8)
+        this.p(['.###.', '#...#', '#...#', '.###.', '....#', '....#', '....#']), // Cola recta
+        this.p(['.##.', '#..#', '#..#', '.###', '...#', '...#', '...#', '..#.']), // Cola muy larga
+        this.p(['.##.', '#..#', '.##.', '...#', '..#.', '.#..', '#...']), // Cola diagonal
+        this.p(['###', '#.#', '###', '..#', '..#']), // Muy compacto
+        this.p(['.###.', '#...#', '#...#', '..##.', '...#.', '...#.']), // Asimétrico
+        this.p(['.##..', '#..#.', '#..#.', '.###.', '...#.', '..#..']), // Inclinado
+        this.p(['.#.', '#.#', '#.#', '.#.', '.#.', '.#.']), // Sin loop cerrado
+        this.p(['.###.', '#...#', '.####', '....#', '....#', '.###.']), // Con curva abajo
       ]
     }
   }

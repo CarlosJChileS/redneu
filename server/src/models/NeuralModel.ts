@@ -41,3 +41,4 @@ const NeuralModelSchema = new Schema<INeuralModel>({
 export const NeuralModel = mongoose.model<INeuralModel>('NeuralModel', NeuralModelSchema)
 
 
+

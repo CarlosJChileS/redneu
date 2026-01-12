@@ -63,7 +63,46 @@ const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(({
   const getPixels = useCallback((): number[] => {
     const canvas = canvasRef.current
     if (!canvas) return []
+    const ctx = canvas.getContext('2d')
+    if (!ctx) return []
 
+    // Obtener bounding box del dibujo
+    const imageData = ctx.getImageData(0, 0, canvasWidth, canvasHeight)
+    let minX = canvasWidth, minY = canvasHeight, maxX = 0, maxY = 0
+    let hasContent = false
+
+    for (let y = 0; y < canvasHeight; y++) {
+      for (let x = 0; x < canvasWidth; x++) {
+        const i = (y * canvasWidth + x) * 4
+        // Si no es blanco (hay dibujo)
+        if (imageData.data[i] < 200) {
+          hasContent = true
+          minX = Math.min(minX, x)
+          minY = Math.min(minY, y)
+          maxX = Math.max(maxX, x)
+          maxY = Math.max(maxY, y)
+        }
+      }
+    }
+
+    if (!hasContent) return Array(784).fill(0)
+
+    // Añadir padding
+    const padding = 20
+    minX = Math.max(0, minX - padding)
+    minY = Math.max(0, minY - padding)
+    maxX = Math.min(canvasWidth, maxX + padding)
+    maxY = Math.min(canvasHeight, maxY + padding)
+
+    const width = maxX - minX
+    const height = maxY - minY
+
+    // Hacer cuadrado (usar el lado más grande)
+    const size = Math.max(width, height)
+    const offsetX = (size - width) / 2
+    const offsetY = (size - height) / 2
+
+    // Canvas temporal para centrar
     const tempCanvas = document.createElement('canvas')
     tempCanvas.width = 28
     tempCanvas.height = 28
@@ -72,17 +111,27 @@ const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(({
 
     tempCtx.fillStyle = 'white'
     tempCtx.fillRect(0, 0, 28, 28)
-    tempCtx.drawImage(canvas, 0, 0, 28, 28)
+    
+    // Dibujar centrado y escalado a 20x20 con margen de 4px
+    const scale = 20 / size
+    tempCtx.drawImage(
+      canvas,
+      minX, minY, width, height,
+      4 + (20 - width * scale) / 2,
+      4 + (20 - height * scale) / 2,
+      width * scale,
+      height * scale
+    )
 
-    const imageData = tempCtx.getImageData(0, 0, 28, 28)
+    const finalData = tempCtx.getImageData(0, 0, 28, 28)
     const pixels: number[] = []
 
-    for (let i = 0; i < imageData.data.length; i += 4) {
-      const gray = 1 - (imageData.data[i] / 255)
+    for (let i = 0; i < finalData.data.length; i += 4) {
+      const gray = 1 - (finalData.data[i] / 255)
       pixels.push(gray)
     }
     return pixels
-  }, [])
+  }, [canvasWidth, canvasHeight])
 
   const paintCell = useCallback((x: number, y: number) => {
     const canvas = canvasRef.current
