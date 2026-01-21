@@ -40,7 +40,7 @@ export class NeuralNetwork {
   }
 
   // Detener entrenamiento en progreso
-  private stopTraining(): void {
+  private _stopTraining(): void {
     if (this.model && isTraining) {
       console.log('[!] Deteniendo entrenamiento anterior...')
       this.model.stopTraining = true
