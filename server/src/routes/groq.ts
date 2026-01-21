@@ -69,7 +69,7 @@ Do not include any other text, just the JSON.`
 
     // Intentar parsear JSON
     try {
-      const parsed = JSON.parse(content)
+      const parsed = JSON.parse(content || '')
       if (typeof parsed.digit === 'number' && parsed.digit >= 0 && parsed.digit <= 9) {
         console.log(`✅ Groq predice: ${parsed.digit} (${(parsed.confidence * 100).toFixed(0)}%)`)
         return res.json({ 
