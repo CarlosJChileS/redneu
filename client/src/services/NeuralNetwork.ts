@@ -3,7 +3,7 @@ import { PredictionResult } from '../types'
 
 const MODEL_STORAGE_KEY = 'indexeddb://digit-recognition-model'
 const MODEL_VERSION_KEY = 'digit-model-version'
-const CURRENT_MODEL_VERSION = '9.0.0' // Modelo eficiente, no congela
+const CURRENT_MODEL_VERSION = '10.0.0' // Modelo preciso con 25 epocas
 
 // URL del servidor API
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:4000'
@@ -42,7 +42,7 @@ export class NeuralNetwork {
   // Detener entrenamiento en progreso
   private stopTraining(): void {
     if (this.model && isTraining) {
-      console.log('⏹️ Deteniendo entrenamiento anterior...')
+      console.log('[!] Deteniendo entrenamiento anterior...')
       this.model.stopTraining = true
     }
   }
@@ -63,13 +63,13 @@ export class NeuralNetwork {
     
     // Si ya está listo, retornar inmediatamente
     if (this.isReady && this.model) {
-      console.log('✅ Modelo ya está listo')
+      console.log('[OK] Modelo ya esta listo')
       return true
     }
     
-    // Solo permitir la primera inicialización
+    // Solo permitir la primera inicializacion
     if (isInitializing && myInitCount > 1) {
-      console.log(`⏳ Esperando inicialización (intento #${myInitCount})...`)
+      console.log(`[...] Esperando inicializacion (intento #${myInitCount})...`)
       // Esperar a que la primera termine
       while (isInitializing && !this.isReady) {
         await new Promise(resolve => setTimeout(resolve, 500))
@@ -78,7 +78,7 @@ export class NeuralNetwork {
     }
     
     isInitializing = true
-    console.log(`🚀 Inicializando (intento #${myInitCount})...`)
+    console.log(`[>] Inicializando (intento #${myInitCount})...`)
     
     try {
       this.updateProgress(5, 'Iniciando TensorFlow...')
@@ -87,12 +87,12 @@ export class NeuralNetwork {
       try {
         await tf.setBackend('webgl')
         await tf.ready()
-        console.log('✅ Usando backend WebGL (GPU)')
+        console.log('[OK] Usando backend WebGL (GPU)')
       } catch (e) {
-        console.log('⚠️ WebGL no disponible, usando CPU...')
+        console.log('[!] WebGL no disponible, usando CPU...')
         await tf.setBackend('cpu')
         await tf.ready()
-        console.log('✅ Usando backend CPU')
+        console.log('[OK] Usando backend CPU')
       }
       
       // 1. Primero intentar cargar del SERVIDOR (MongoDB)
@@ -134,12 +134,12 @@ export class NeuralNetwork {
       this.updateProgress(97, 'Subiendo al servidor...')
       await this.uploadToServer()
 
-      this.updateProgress(100, '¡Listo!')
+      this.updateProgress(100, 'Listo!')
       this.isReady = true
       isInitializing = false
       return true
     } catch (e) {
-      console.error('❌', e)
+      console.error('[X]', e)
       isInitializing = false
       return false
     }
@@ -151,7 +151,7 @@ export class NeuralNetwork {
       const response = await fetch(`${API_URL}/api/model`)
       
       if (!response.ok) {
-        console.log('📦 No hay modelo en el servidor')
+        console.log('[i] No hay modelo en el servidor')
         return false
       }
 
@@ -207,16 +207,16 @@ export class NeuralNetwork {
       })
 
       this.model = loadedModel as tf.Sequential
-      console.log(`✅ Modelo cargado desde servidor (v${data.model.version}, acc: ${(data.model.accuracy * 100).toFixed(1)}%)`)
+      console.log(`[OK] Modelo cargado desde servidor (v${data.model.version}, acc: ${(data.model.accuracy * 100).toFixed(1)}%)`)
       
       return true
     } catch (error) {
-      console.log('📦 Error cargando del servidor:', error)
+      console.log('[i] Error cargando del servidor:', error)
       return false
     }
   }
 
-  // Subir modelo al servidor (MongoDB)
+  // Subir modelo al servidor (MongoDB) - FIX: Usando chunks para evitar stack overflow
   private async uploadToServer(): Promise<boolean> {
     if (!this.model) return false
 
@@ -233,10 +233,10 @@ export class NeuralNetwork {
         weightsData.push(...Array.from(data))
       }
       
-      // Convertir a base64
+      // Convertir a base64 usando chunks (evita stack overflow)
       const float32Array = new Float32Array(weightsData)
       const uint8Array = new Uint8Array(float32Array.buffer)
-      const weightsBase64 = this.arrayBufferToBase64(uint8Array.buffer)
+      const weightsBase64 = this.arrayBufferToBase64Chunked(uint8Array)
 
       // Enviar al servidor
       const response = await fetch(`${API_URL}/api/model`, {
@@ -246,17 +246,17 @@ export class NeuralNetwork {
           modelJson: modelJson,
           weightsBase64: weightsBase64,
           version: CURRENT_MODEL_VERSION,
-          accuracy: 0.95 // Aproximado
+          accuracy: 0.97
         })
       })
 
       if (response.ok) {
-        console.log('✅ Modelo subido al servidor')
+        console.log('[OK] Modelo subido al servidor')
         return true
       }
       return false
     } catch (error) {
-      console.log('⚠️ No se pudo subir al servidor:', error)
+      console.log('[!] No se pudo subir al servidor:', error)
       return false
     }
   }
@@ -271,20 +271,24 @@ export class NeuralNetwork {
     return bytes.buffer
   }
 
-  private arrayBufferToBase64(buffer: ArrayBuffer): string {
-    const bytes = new Uint8Array(buffer)
-    let binary = ''
-    for (let i = 0; i < bytes.byteLength; i++) {
-      binary += String.fromCharCode(bytes[i])
+  // FIX: Conversion a base64 usando chunks para evitar "Maximum call stack size exceeded"
+  private arrayBufferToBase64Chunked(uint8Array: Uint8Array): string {
+    const CHUNK_SIZE = 0x8000 // 32KB chunks
+    const chunks: string[] = []
+    
+    for (let i = 0; i < uint8Array.length; i += CHUNK_SIZE) {
+      const chunk = uint8Array.subarray(i, Math.min(i + CHUNK_SIZE, uint8Array.length))
+      chunks.push(String.fromCharCode.apply(null, Array.from(chunk)))
     }
-    return btoa(binary)
+    
+    return btoa(chunks.join(''))
   }
 
   private async tryLoadSavedModel(): Promise<boolean> {
     try {
       const savedVersion = localStorage.getItem(MODEL_VERSION_KEY)
       if (savedVersion !== CURRENT_MODEL_VERSION) {
-        console.log('📦 Versión de modelo diferente, re-entrenando...')
+        console.log('[i] Version de modelo diferente, re-entrenando...')
         try {
           await tf.io.removeModel(MODEL_STORAGE_KEY)
         } catch {
@@ -309,12 +313,12 @@ export class NeuralNetwork {
         })
         
         this.model = loadedModel as tf.Sequential
-        console.log('✅ Modelo cargado desde IndexedDB')
+        console.log('[OK] Modelo cargado desde IndexedDB')
         return true
       }
       return false
     } catch (error) {
-      console.log('📦 No hay modelo local guardado')
+      console.log('[i] No hay modelo local guardado')
       return false
     }
   }
@@ -325,7 +329,7 @@ export class NeuralNetwork {
     try {
       await this.model.save(MODEL_STORAGE_KEY)
       localStorage.setItem(MODEL_VERSION_KEY, CURRENT_MODEL_VERSION)
-      console.log('💾 Modelo guardado en IndexedDB')
+      console.log('[+] Modelo guardado en IndexedDB')
     } catch (error) {
       console.error('Error guardando modelo:', error)
     }
@@ -333,11 +337,11 @@ export class NeuralNetwork {
 
   async retrainModel(): Promise<boolean> {
     try {
-      console.log('🔄 Iniciando re-entrenamiento...')
+      console.log('[~] Iniciando re-entrenamiento...')
       
       // Si hay entrenamiento en progreso, no permitir
       if (isTraining) {
-        console.log('⚠️ Hay un entrenamiento en progreso. Espera a que termine.')
+        console.log('[!] Hay un entrenamiento en progreso. Espera a que termine.')
         this.updateProgress(0, 'Espera a que termine el entrenamiento actual...')
         return false
       }
@@ -348,21 +352,21 @@ export class NeuralNetwork {
       try {
         await tf.io.removeModel(MODEL_STORAGE_KEY)
         localStorage.removeItem(MODEL_VERSION_KEY)
-        console.log('🗑️ Modelo local eliminado')
+        console.log('[-] Modelo local eliminado')
       } catch {
-        console.log('⚠️ No había modelo local')
+        console.log('[!] No habia modelo local')
       }
 
       // Eliminar modelo del servidor
       try {
         await fetch(`${API_URL}/api/model`, { method: 'DELETE' })
-        console.log('🗑️ Modelo del servidor eliminado')
+        console.log('[-] Modelo del servidor eliminado')
       } catch {
-        console.log('⚠️ No se pudo eliminar del servidor')
+        console.log('[!] No se pudo eliminar del servidor')
       }
 
       // Crear modelo nuevo directamente (sin pasar por initialize)
-      console.log('🆕 Creando modelo nuevo...')
+      console.log('[+] Creando modelo nuevo...')
       this.updateProgress(18, 'Limpiando memoria...')
       await this.yieldToUI()
       
@@ -395,7 +399,7 @@ export class NeuralNetwork {
         await tf.setBackend('webgl')
         await tf.ready()
       } catch (e) {
-        console.log('⚠️ WebGL falló, usando CPU...')
+        console.log('[!] WebGL fallo, usando CPU...')
         await tf.setBackend('cpu')
         await tf.ready()
       }
@@ -424,7 +428,7 @@ export class NeuralNetwork {
       
       return true
     } catch (error) {
-      console.error('❌ Error re-entrenando:', error)
+      console.error('[X] Error re-entrenando:', error)
       isTraining = false
       isInitializing = false
       return false
@@ -434,7 +438,7 @@ export class NeuralNetwork {
   private buildModel(): tf.Sequential {
     const m = tf.sequential()
     
-    // MODELO EFICIENTE - Buen balance precisión/velocidad
+    // MODELO PRECISO - Arquitectura mejorada con BatchNorm
     m.add(tf.layers.conv2d({
       inputShape: [28, 28, 1],
       filters: 32,
@@ -442,9 +446,23 @@ export class NeuralNetwork {
       activation: 'relu',
       padding: 'same'
     }))
+    m.add(tf.layers.batchNormalization())
+    m.add(tf.layers.conv2d({
+      filters: 32,
+      kernelSize: 3,
+      activation: 'relu',
+      padding: 'same'
+    }))
     m.add(tf.layers.maxPooling2d({ poolSize: 2 }))
-    m.add(tf.layers.dropout({ rate: 0.2 }))
+    m.add(tf.layers.dropout({ rate: 0.25 }))
     
+    m.add(tf.layers.conv2d({
+      filters: 64,
+      kernelSize: 3,
+      activation: 'relu',
+      padding: 'same'
+    }))
+    m.add(tf.layers.batchNormalization())
     m.add(tf.layers.conv2d({
       filters: 64,
       kernelSize: 3,
@@ -455,8 +473,11 @@ export class NeuralNetwork {
     m.add(tf.layers.dropout({ rate: 0.25 }))
     
     m.add(tf.layers.flatten())
-    m.add(tf.layers.dense({ units: 128, activation: 'relu' }))
+    m.add(tf.layers.dense({ units: 256, activation: 'relu' }))
+    m.add(tf.layers.batchNormalization())
     m.add(tf.layers.dropout({ rate: 0.4 }))
+    m.add(tf.layers.dense({ units: 128, activation: 'relu' }))
+    m.add(tf.layers.dropout({ rate: 0.3 }))
     m.add(tf.layers.dense({ units: 10, activation: 'softmax' }))
 
     m.compile({
@@ -470,51 +491,51 @@ export class NeuralNetwork {
 
   private async train(): Promise<void> {
     if (!this.model) {
-      console.error('❌ No hay modelo para entrenar')
+      console.error('[X] No hay modelo para entrenar')
       return
     }
 
     // Verificar si ya hay un entrenamiento en progreso
     if (isTraining) {
-      console.log('⚠️ Ya hay un entrenamiento en progreso')
+      console.log('[!] Ya hay un entrenamiento en progreso')
       throw new Error('Ya hay un entrenamiento en progreso')
     }
 
     isTraining = true
-    console.log('🎯 Iniciando entrenamiento...')
+    console.log('[>] Iniciando entrenamiento...')
     this.updateProgress(22, 'Generando estilos de escritura...')
     await this.yieldToUI()
     
     try {
-      console.log('📊 Generando dataset...')
+      console.log('[~] Generando dataset...')
       const { xs, ys } = await this.createDatasetAsync()
-      console.log(`✅ Dataset creado: xs=${xs.shape}, ys=${ys.shape}`)
+      console.log(`[OK] Dataset creado: xs=${xs.shape}, ys=${ys.shape}`)
       
-      const totalEpochs = 20 // Balance precisión/velocidad
+      const totalEpochs = 25 // Mayor precision
       
-      console.log('🏋️ Iniciando fit()...')
+      console.log('[>] Iniciando fit()...')
       await this.model.fit(xs, ys, {
         epochs: totalEpochs,
-        batchSize: 32, // Más pequeño para no congelar
+        batchSize: 64,
         shuffle: true,
         validationSplit: 0.15,
         callbacks: {
           onEpochEnd: async (epoch, logs) => {
             const progress = 25 + ((epoch + 1) / totalEpochs) * 65
             const acc = ((logs?.acc || 0) * 100).toFixed(0)
-            console.log(`📈 Época ${epoch + 1}/${totalEpochs} - acc: ${acc}%`)
-            this.updateProgress(progress, `Época ${epoch + 1}/${totalEpochs} (${acc}%)`)
+            console.log(`[${epoch + 1}/${totalEpochs}] acc: ${acc}%`)
+            this.updateProgress(progress, `Epoca ${epoch + 1}/${totalEpochs} (${acc}%)`)
             await this.yieldToUI()
           }
         }
       })
-      console.log('✅ Entrenamiento completado')
+      console.log('[OK] Entrenamiento completado')
 
       xs.dispose()
       ys.dispose()
       isTraining = false
     } catch (error) {
-      console.error('❌ Error en entrenamiento:', error)
+      console.error('[X] Error en entrenamiento:', error)
       isTraining = false
       throw error
     }
@@ -525,7 +546,7 @@ export class NeuralNetwork {
     const Y: number[][] = []
     
     const templates = this.getAllTemplates()
-    const samplesPerDigit = 300 // Más ligero para no congelar
+    const samplesPerDigit = 350 // 3500 muestras totales
     
     for (let d = 0; d < 10; d++) {
       const digitTemplates = templates[d]
@@ -540,17 +561,16 @@ export class NeuralNetwork {
         label[d] = 1
         Y.push(label)
         
-        // Ceder control cada 10 muestras
-        if (i % 10 === 0) {
+        if (i % 15 === 0) {
           await this.yieldToUI()
         }
       }
       
-      this.updateProgress(22 + (d / 10) * 3, `Dígito ${d}...`)
+      this.updateProgress(22 + (d / 10) * 3, `Digito ${d}...`)
       await this.yieldToUI()
     }
 
-    console.log(`📦 Dataset: ${X.length} muestras`)
+    console.log(`[+] Dataset: ${X.length} muestras`)
 
     // Shuffle simple
     for (let i = X.length - 1; i > 0; i--) {
@@ -564,21 +584,26 @@ export class NeuralNetwork {
 
   private getRandomStyle(): WritingStyle {
     const styles: WritingStyle[] = [
-      // Estilos con GROSOR ALTO (como dibuja el usuario)
+      // Tamanos GRANDES - Numeros que ocupan casi todo el canvas
+      { scale: 5.0, thickness: 1.3, shearX: 0, shearY: 0, stretchX: 1, stretchY: 1, blur: 0.2, noise: 0 },
+      { scale: 4.5, thickness: 1.2, shearX: 0, shearY: 0, stretchX: 1, stretchY: 1, blur: 0.25, noise: 0 },
+      { scale: 4.0, thickness: 1.1, shearX: 0, shearY: 0, stretchX: 1, stretchY: 1, blur: 0.2, noise: 0 },
+      { scale: 5.5, thickness: 1.0, shearX: 0, shearY: 0, stretchX: 1, stretchY: 1, blur: 0.15, noise: 0 },
+      // Tamanos MEDIANOS - Numeros normales
       { scale: 3.0, thickness: 1.2, shearX: 0, shearY: 0, stretchX: 1, stretchY: 1, blur: 0.3, noise: 0 },
       { scale: 2.5, thickness: 1.3, shearX: 0, shearY: 0, stretchX: 1, stretchY: 1, blur: 0.2, noise: 0 },
       { scale: 3.5, thickness: 1.1, shearX: 0, shearY: 0, stretchX: 1, stretchY: 1, blur: 0.3, noise: 0 },
-      { scale: 3.0, thickness: 1.2, shearX: 0.15, shearY: 0, stretchX: 0.95, stretchY: 1, blur: 0.2, noise: 0 },
-      { scale: 3.0, thickness: 1.2, shearX: -0.15, shearY: 0, stretchX: 0.95, stretchY: 1, blur: 0.2, noise: 0 },
       { scale: 2.8, thickness: 1.25, shearX: 0, shearY: 0, stretchX: 1.1, stretchY: 1, blur: 0.25, noise: 0 },
-      { scale: 2.8, thickness: 1.2, shearX: 0, shearY: 0, stretchX: 1, stretchY: 1.1, blur: 0.25, noise: 0 },
+      // Tamanos PEQUENOS - Numeros pequenos en el centro
+      { scale: 2.0, thickness: 1.4, shearX: 0, shearY: 0, stretchX: 1, stretchY: 1, blur: 0.4, noise: 0 },
+      { scale: 1.8, thickness: 1.5, shearX: 0, shearY: 0, stretchX: 1, stretchY: 1, blur: 0.35, noise: 0 },
+      { scale: 1.5, thickness: 1.6, shearX: 0, shearY: 0, stretchX: 1, stretchY: 1, blur: 0.5, noise: 0 },
+      { scale: 2.2, thickness: 1.35, shearX: 0, shearY: 0, stretchX: 1, stretchY: 1, blur: 0.3, noise: 0 },
+      // Con inclinacion (varios tamanos)
+      { scale: 4.0, thickness: 1.2, shearX: 0.2, shearY: 0, stretchX: 0.95, stretchY: 1, blur: 0.2, noise: 0 },
+      { scale: 3.0, thickness: 1.2, shearX: 0.15, shearY: 0, stretchX: 0.95, stretchY: 1, blur: 0.2, noise: 0 },
+      { scale: 2.0, thickness: 1.4, shearX: -0.15, shearY: 0, stretchX: 0.95, stretchY: 1, blur: 0.3, noise: 0 },
       { scale: 3.2, thickness: 1.0, shearX: 0, shearY: 0, stretchX: 1, stretchY: 1, blur: 0.3, noise: 0 },
-      { scale: 2.6, thickness: 1.4, shearX: 0, shearY: 0, stretchX: 1, stretchY: 1, blur: 0.4, noise: 0 },
-      { scale: 3.3, thickness: 1.1, shearX: 0, shearY: 0, stretchX: 0.9, stretchY: 1, blur: 0.2, noise: 0 },
-      { scale: 3.3, thickness: 1.15, shearX: 0, shearY: 0, stretchX: 1.15, stretchY: 0.95, blur: 0.25, noise: 0 },
-      { scale: 2.8, thickness: 1.1, shearX: 0.1, shearY: 0, stretchX: 1.05, stretchY: 1, blur: 0.3, noise: 0.05 },
-      { scale: 2.7, thickness: 1.3, shearX: 0, shearY: 0, stretchX: 1, stretchY: 1, blur: 0.35, noise: 0 },
-      { scale: 4.0, thickness: 1.0, shearX: 0, shearY: 0, stretchX: 1, stretchY: 1, blur: 0.2, noise: 0 },
     ]
     
     const base = styles[Math.floor(Math.random() * styles.length)]
@@ -595,37 +620,31 @@ export class NeuralNetwork {
     }
   }
 
-  // Estilo "desordenado" para escritura mal hecha - Con GROSOR REALISTA
+  // Estilo "desordenado" para escritura mal hecha - Con tamanos variados
   private getMessyStyle(): WritingStyle {
     const messyTypes = [
-      // Inclinado derecha con grosor
+      // GRANDES desordenados
+      { scale: 5.0, thickness: 1.2, shearX: 0.3, shearY: 0.05, stretchX: 0.95, stretchY: 1.05, blur: 0.3, noise: 0.1 },
+      { scale: 4.5, thickness: 1.3, shearX: -0.25, shearY: 0, stretchX: 1.0, stretchY: 1.0, blur: 0.25, noise: 0.1 },
+      { scale: 4.0, thickness: 1.1, shearX: 0.15, shearY: 0, stretchX: 1.1, stretchY: 1.05, blur: 0.35, noise: 0.15 },
+      // MEDIANOS desordenados
       { scale: 3.0, thickness: 1.1, shearX: 0.4, shearY: 0.05, stretchX: 0.9, stretchY: 1.05, blur: 0.3, noise: 0.1 },
-      // Inclinado izquierda con grosor
       { scale: 3.0, thickness: 1.15, shearX: -0.35, shearY: -0.05, stretchX: 0.95, stretchY: 1.0, blur: 0.25, noise: 0.1 },
-      // Grande y grueso
       { scale: 3.8, thickness: 1.3, shearX: 0.1, shearY: 0, stretchX: 1.1, stretchY: 1.1, blur: 0.4, noise: 0.15 },
-      // Estirado horizontal grueso
       { scale: 3.2, thickness: 1.0, shearX: 0, shearY: 0, stretchX: 1.4, stretchY: 0.85, blur: 0.3, noise: 0.1 },
-      // Estirado vertical grueso
       { scale: 3.2, thickness: 1.0, shearX: 0, shearY: 0, stretchX: 0.8, stretchY: 1.35, blur: 0.3, noise: 0.1 },
-      // Borroso grueso
+      // PEQUENOS desordenados
+      { scale: 2.0, thickness: 1.3, shearX: 0.2, shearY: 0.05, stretchX: 0.95, stretchY: 1.0, blur: 0.5, noise: 0.1 },
+      { scale: 1.8, thickness: 1.4, shearX: -0.2, shearY: 0, stretchX: 1.0, stretchY: 1.1, blur: 0.45, noise: 0.15 },
+      { scale: 1.5, thickness: 1.5, shearX: 0.15, shearY: 0.05, stretchX: 1.1, stretchY: 0.95, blur: 0.6, noise: 0.2 },
+      { scale: 2.2, thickness: 1.25, shearX: -0.1, shearY: 0, stretchX: 1.0, stretchY: 1.0, blur: 0.4, noise: 0.12 },
+      // Borrosos y gruesos (varios tamanos)
       { scale: 2.8, thickness: 1.2, shearX: 0.1, shearY: 0.05, stretchX: 1, stretchY: 1, blur: 0.6, noise: 0.2 },
-      // Normal grueso
       { scale: 3.0, thickness: 1.25, shearX: 0.05, shearY: 0, stretchX: 1, stretchY: 1, blur: 0.35, noise: 0.12 },
-      // Distorsionado grueso
-      { scale: 2.8, thickness: 1.1, shearX: 0.25, shearY: 0.15, stretchX: 0.9, stretchY: 1.1, blur: 0.35, noise: 0.15 },
-      // Escritura rápida gruesa
-      { scale: 3.2, thickness: 1.0, shearX: 0.5, shearY: 0.1, stretchX: 1.15, stretchY: 0.95, blur: 0.4, noise: 0.15 },
-      // Escritura irregular gruesa
-      { scale: 3.3, thickness: 1.2, shearX: -0.2, shearY: 0.1, stretchX: 1.05, stretchY: 1.15, blur: 0.45, noise: 0.2 },
-      // Tembloroso grueso
-      { scale: 2.6, thickness: 1.1, shearX: 0.08, shearY: 0.03, stretchX: 0.98, stretchY: 1.02, blur: 0.7, noise: 0.25 },
-      // Comprimido grueso
-      { scale: 2.8, thickness: 1.2, shearX: 0, shearY: 0, stretchX: 0.7, stretchY: 1.15, blur: 0.25, noise: 0.1 },
-      // Expandido grueso
-      { scale: 2.8, thickness: 1.1, shearX: 0, shearY: 0, stretchX: 1.3, stretchY: 0.8, blur: 0.3, noise: 0.1 },
-      // Muy grueso descuidado
+      { scale: 4.5, thickness: 1.0, shearX: 0, shearY: 0, stretchX: 1, stretchY: 1, blur: 0.5, noise: 0.15 },
+      // Muy gruesos descuidados
       { scale: 3.0, thickness: 1.5, shearX: -0.15, shearY: 0.08, stretchX: 1.05, stretchY: 1.0, blur: 0.5, noise: 0.2 },
+      { scale: 2.5, thickness: 1.6, shearX: 0.1, shearY: 0, stretchX: 1.0, stretchY: 1.0, blur: 0.4, noise: 0.15 },
     ]
     
     const base = messyTypes[Math.floor(Math.random() * messyTypes.length)]
@@ -1014,7 +1033,7 @@ export class NeuralNetwork {
     const digit = probs.indexOf(best)
 
     const sorted = probs.map((v, i) => ({ d: i, p: v })).sort((a, b) => b.p - a.p)
-    console.log(`🔢 ${digit} (${(best*100).toFixed(0)}%) | Top3: ${sorted.slice(0,3).map(x=>`${x.d}:${(x.p*100).toFixed(0)}%`).join(' ')}`)
+    console.log(`[#] ${digit} (${(best*100).toFixed(0)}%) | Top3: ${sorted.slice(0,3).map(x=>`${x.d}:${(x.p*100).toFixed(0)}%`).join(' ')}`)
 
     return {
       probabilities: probs,

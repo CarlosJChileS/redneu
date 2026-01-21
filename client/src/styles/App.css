@@ -44,6 +44,14 @@
   cursor: pointer;
   transition: all 0.2s;
   box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.btn-clear svg {
+  flex-shrink: 0;
 }
 
 .btn-clear:hover:not(:disabled) {
@@ -67,6 +75,23 @@
   cursor: pointer;
   transition: all 0.2s;
   box-shadow: 0 4px 15px rgba(0, 201, 177, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.btn-retrain svg {
+  flex-shrink: 0;
+}
+
+.btn-retrain svg.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .btn-retrain:hover:not(:disabled) {

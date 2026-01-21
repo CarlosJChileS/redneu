@@ -18,6 +18,14 @@
   margin-bottom: 10px;
   padding-bottom: 8px;
   border-bottom: 2px solid rgba(0, 201, 177, 0.15);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.network-panel .panel-label svg {
+  color: #00C9B1;
+  flex-shrink: 0;
 }
 
 .network-panel canvas {

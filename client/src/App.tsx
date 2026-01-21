@@ -95,13 +95,13 @@ function App() {
   }, [])
 
   const handleRetrain = useCallback(async () => {
-    console.log('🔄 Botón RE-ENTRENAR presionado')
+    console.log('[>] Boton RE-ENTRENAR presionado')
     
     const nn = NeuralNetwork.getInstance()
     networkRef.current = nn
     
     if (isRetraining) {
-      console.log('⚠️ Ya está re-entrenando')
+      console.log('[!] Ya esta re-entrenando')
       return
     }
     
@@ -116,20 +116,20 @@ function App() {
     try {
       // Reconectar el callback de progreso
       nn.onProgress = (progress: number, status: string) => {
-        console.log(`📊 Progreso: ${progress}% - ${status}`)
+        console.log(`[${progress}%] ${status}`)
         setLoadingProgress(progress)
         setLoadingStatus(status)
       }
       
-      console.log('🚀 Iniciando retrainModel()...')
+      console.log('[>] Iniciando retrainModel()...')
       const success = await nn.retrainModel()
-      console.log(`✅ retrainModel() completado: ${success}`)
+      console.log(`[OK] retrainModel() completado: ${success}`)
       
       if (success) {
         setIsReady(true)
       }
     } catch (error) {
-      console.error('❌ Error re-entrenando:', error)
+      console.error('[X] Error re-entrenando:', error)
     } finally {
       setIsLoading(false)
       setIsRetraining(false)
@@ -157,7 +157,10 @@ function App() {
             />
             <div className="button-row">
               <button className="btn-clear" onClick={handleClear} disabled={!isReady}>
-                🔄 LIMPIAR
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                </svg>
+                LIMPIAR
               </button>
               <button 
                 className="btn-retrain" 
@@ -165,7 +168,22 @@ function App() {
                 disabled={isRetraining || isLoading}
                 title="Re-entrena el modelo desde cero"
               >
-                {isRetraining ? '⏳ ENTRENANDO...' : '🧠 RE-ENTRENAR'}
+                {isRetraining ? (
+                  <>
+                    <svg className="spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 12a9 9 0 11-6.219-8.56"/>
+                    </svg>
+                    ENTRENANDO...
+                  </>
+                ) : (
+                  <>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M23 4v6h-6M1 20v-6h6"/>
+                      <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+                    </svg>
+                    RE-ENTRENAR
+                  </>
+                )}
               </button>
             </div>
           </div>

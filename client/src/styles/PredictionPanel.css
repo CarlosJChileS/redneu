@@ -64,7 +64,12 @@
 }
 
 .waiting-icon {
-  font-size: 32px;
+  color: #FFB84C;
+  opacity: 0.7;
+}
+
+.waiting svg {
+  color: #FFB84C;
 }
 
 .probabilities {
