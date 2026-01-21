@@ -7,7 +7,7 @@ import cors from 'cors'
 import { groqRouter } from './routes/groq.js'
 
 const app = express()
-const PORT = process.env.PORT || 4000
+const PORT = parseInt(process.env.PORT || '4000', 10)
 
 // Middlewares
 app.use(cors())
@@ -27,7 +27,7 @@ app.get('/api/health', (_, res) => {
 
 // Iniciar servidor - Render requiere escuchar en 0.0.0.0
 const HOST = '0.0.0.0'
-app.listen(Number(PORT), HOST, () => {
+app.listen(PORT, HOST, () => {
   console.log(`🚀 Servidor corriendo en http://${HOST}:${PORT}`)
   console.log(`📡 API Groq disponible en /api/groq/analyze`)
   console.log(`🔑 API Key: ${process.env.GROQ_API_KEY ? 'Configurada ✓' : 'NO CONFIGURADA ❌'}`)
