@@ -63,7 +63,7 @@ Do not include any other text, just the JSON.`
       })
     }
 
-    const data = await response.json()
+    const data = await response.json() as { choices?: { message?: { content?: string } }[] }
     const content = data.choices?.[0]?.message?.content?.trim()
     console.log('📝 Groq responde:', content)
 
