@@ -99,8 +99,6 @@ const DrawingCanvas = forwardRef<DrawingCanvasRef, DrawingCanvasProps>(({
 
     // Hacer cuadrado (usar el lado más grande)
     const size = Math.max(width, height)
-    const _offsetX = (size - width) / 2
-    const _offsetY = (size - height) / 2
 
     // Canvas temporal para centrar
     const tempCanvas = document.createElement('canvas')

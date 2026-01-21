@@ -25,9 +25,10 @@ app.get('/api/health', (_, res) => {
   })
 })
 
-// Iniciar servidor
-app.listen(PORT, () => {
-  console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`)
+// Iniciar servidor - Render requiere escuchar en 0.0.0.0
+const HOST = '0.0.0.0'
+app.listen(Number(PORT), HOST, () => {
+  console.log(`🚀 Servidor corriendo en http://${HOST}:${PORT}`)
   console.log(`📡 API Groq disponible en /api/groq/analyze`)
   console.log(`🔑 API Key: ${process.env.GROQ_API_KEY ? 'Configurada ✓' : 'NO CONFIGURADA ❌'}`)
 })
