@@ -162,29 +162,6 @@ function App() {
                 </svg>
                 LIMPIAR
               </button>
-              <button 
-                className="btn-retrain" 
-                onClick={handleRetrain} 
-                disabled={isRetraining || isLoading}
-                title="Re-entrena el modelo desde cero"
-              >
-                {isRetraining ? (
-                  <>
-                    <svg className="spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M21 12a9 9 0 11-6.219-8.56"/>
-                    </svg>
-                    ENTRENANDO...
-                  </>
-                ) : (
-                  <>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M23 4v6h-6M1 20v-6h6"/>
-                      <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
-                    </svg>
-                    RE-ENTRENAR
-                  </>
-                )}
-              </button>
             </div>
           </div>
         </div>
