@@ -16,7 +16,6 @@ function App() {
   const [thumbnailData, setThumbnailData] = useState<string | null>(null)
   const [loadingProgress, setLoadingProgress] = useState(0)
   const [loadingStatus, setLoadingStatus] = useState('Iniciando...')
-  const [isRetraining, setIsRetraining] = useState(false)
 
   useEffect(() => {
     let mounted = true
@@ -93,48 +92,6 @@ function App() {
     setPrediction(null)
     setThumbnailData(null)
   }, [])
-
-  const handleRetrain = useCallback(async () => {
-    console.log('[>] Boton RE-ENTRENAR presionado')
-    
-    const nn = NeuralNetwork.getInstance()
-    networkRef.current = nn
-    
-    if (isRetraining) {
-      console.log('[!] Ya esta re-entrenando')
-      return
-    }
-    
-    setIsRetraining(true)
-    setIsLoading(true)
-    setLoadingProgress(0)
-    setLoadingStatus('Preparando re-entrenamiento...')
-    setPrediction(null)
-    setThumbnailData(null)
-    setIsReady(false)
-    
-    try {
-      // Reconectar el callback de progreso
-      nn.onProgress = (progress: number, status: string) => {
-        console.log(`[${progress}%] ${status}`)
-        setLoadingProgress(progress)
-        setLoadingStatus(status)
-      }
-      
-      console.log('[>] Iniciando retrainModel()...')
-      const success = await nn.retrainModel()
-      console.log(`[OK] retrainModel() completado: ${success}`)
-      
-      if (success) {
-        setIsReady(true)
-      }
-    } catch (error) {
-      console.error('[X] Error re-entrenando:', error)
-    } finally {
-      setIsLoading(false)
-      setIsRetraining(false)
-    }
-  }, [isRetraining])
 
   return (
     <div className="app">
